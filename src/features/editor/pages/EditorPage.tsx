@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import Dashboard from '@uppy/react/dashboard';
-import { AlertCircle, Download, Sparkles } from 'lucide-react';
+import { AlertCircle, Download, FileVideo, Sparkles, Upload as UploadIcon } from 'lucide-react';
 
 import { StatusBadge } from '../../../shared/components/StatusBadge';
 import { createId } from '../../../shared/lib/id';
@@ -69,6 +69,8 @@ export function EditorPage() {
       const objectUrl = URL.createObjectURL(file);
       previousObjectUrlRef.current = objectUrl;
 
+      console.log('[EditorPage] Video seleccionado:', file.name, 'URL creada:', objectUrl);
+
       setVideo({
         id: createId('video'),
         fileName: file.name,
@@ -79,14 +81,18 @@ export function EditorPage() {
       });
 
       setUiError(null);
-      setUiMessage('Video cargado correctamente. Define cortes en la linea de tiempo.');
+      setUiMessage('Video cargado correctamente. Espera a que se genere la linea de tiempo.');
       
-      // Cerrar modal automáticamente después de la carga
-      setTimeout(() => setDashboardOpen(false), 100);
+      setTimeout(() => setDashboardOpen(false), 200);
     },
     onUploadIdReceived: setVideoUploadId,
     onUploadStateChange: setUploadState,
   });
+
+  useEffect(() => {
+    console.log('[EditorPage] mediaElement actualizado:', mediaElement ? 'Video element disponible' : 'null');
+    console.log('[EditorPage] Video en store:', video ? `${video.fileName} (${video.duration}s)` : 'null');
+  }, [mediaElement, video]);
 
   useEffect(() => {
     return () => {
@@ -218,10 +224,10 @@ export function EditorPage() {
         />
 
         {isDashboardOpen ? (
-          <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-950/60 px-4 backdrop-blur-sm">
-            <div className="w-full max-w-5xl rounded-3xl border border-white/60 bg-white p-4 shadow-2xl dark:border-slate-700/60 dark:bg-slate-800">
-              <div className="mb-3 flex items-center justify-between gap-3">
-                <h2 className="font-display text-lg font-semibold text-slate-900 dark:text-slate-100">Cargar video</h2>
+          <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-950/70 px-4 backdrop-blur-sm">
+            <div className="w-full max-w-4xl overflow-hidden rounded-3xl border border-white/60 bg-white shadow-2xl dark:border-slate-700/60 dark:bg-slate-800">
+              <div className="flex items-center justify-between gap-3 border-b border-slate-200 bg-gradient-to-r from-slate-50 to-white p-5 dark:border-slate-700 dark:from-slate-800 dark:to-slate-800">
+                <h2 className="font-display text-xl font-semibold text-slate-900 dark:text-slate-100">Cargar video</h2>
                 <button
                   type="button"
                   className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm text-slate-600 transition hover:bg-slate-100 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-700"
@@ -230,20 +236,50 @@ export function EditorPage() {
                   Cerrar
                 </button>
               </div>
-              <Dashboard
-                uppy={uppy}
-                proudlyDisplayPoweredByUppy={false}
-                hideUploadButton={!isTusEnabled}
-                height={360}
-                note="Arrastra tu video aquí o haz click para seleccionar. Máximo 2 GB."
-                locale={{
-                  strings: {
-                    dropPasteBoth: 'Arrastra el video aquí, pega o %{browseFiles}',
-                    dropPasteFiles: 'Arrastra el video aquí o %{browseFiles}',
-                    browseFiles: 'haz click para seleccionar',
-                  },
-                }}
-              />
+
+              {/* Instrucciones visuales claras */}
+              <div className="border-b border-slate-200 bg-gradient-to-br from-brand-50/50 to-cyan-50/30 p-6 dark:border-slate-700 dark:from-brand-950/20 dark:to-cyan-950/10">
+                <div className="flex items-start gap-4">
+                  <div className="rounded-xl bg-brand-100 p-3 dark:bg-brand-900/40">
+                    <FileVideo className="h-8 w-8 text-brand-700 dark:text-brand-400" aria-hidden="true" />
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="font-display text-lg font-semibold text-slate-900 dark:text-slate-100">
+                      Arrastra tu video aquí
+                    </h3>
+                    <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
+                      O haz click en el área de abajo para seleccionar un archivo de tu equipo
+                    </p>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <span className="rounded-lg bg-white px-2.5 py-1 text-xs font-medium text-slate-700 ring-1 ring-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:ring-slate-700">
+                        Máximo 2 GB
+                      </span>
+                      <span className="rounded-lg bg-white px-2.5 py-1 text-xs font-medium text-slate-700 ring-1 ring-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:ring-slate-700">
+                        MP4, WebM, MOV
+                      </span>
+                    </div>
+                  </div>
+                  <UploadIcon className="h-6 w-6 text-slate-400" aria-hidden="true" />
+                </div>
+              </div>
+
+              {/* Dashboard de Uppy */}
+              <div className="p-5">
+                <Dashboard
+                  uppy={uppy}
+                  proudlyDisplayPoweredByUppy={false}
+                  hideUploadButton={!isTusEnabled}
+                  height={280}
+                  note="Formatos de video soportados: MP4, WebM, MOV, AVI"
+                  locale={{
+                    strings: {
+                      dropPasteBoth: 'Suelta el video aquí o %{browseFiles}',
+                      dropPasteFiles: 'Suelta el video aquí o %{browseFiles}',
+                      browseFiles: 'selecciona un archivo',
+                    },
+                  }}
+                />
+              </div>
             </div>
           </div>
         ) : null}
@@ -326,6 +362,8 @@ export function EditorPage() {
             Job activo: {activeJobContext ? `${activeJobContext.action} (${activeJobContext.jobId})` : 'ninguno'}
             {' · '}
             Estado query: {jobStatusQuery.isFetching ? 'consultando' : 'estable'}
+            {' · '}
+            Media: {mediaElement ? 'conectado' : 'desconectado'}
           </p>
           {!isTusEnabled ? <StatusBadge className="mt-2">Tus pendiente de configurar en entorno</StatusBadge> : null}
         </footer>
