@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { FileVideo, Play } from 'lucide-react';
 import Plyr from 'plyr';
@@ -23,15 +23,16 @@ export function VideoPlayer({
 }: VideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const playerRef = useRef<Plyr | null>(null);
+  const [isPlayerReady, setIsPlayerReady] = useState(false);
 
+  // Inicializar Plyr solo una vez
   useEffect(() => {
     const mediaElement = videoRef.current;
-    if (!mediaElement) {
-      console.log('[VideoPlayer] No mediaElement disponible');
+    if (!mediaElement || playerRef.current) {
       return;
     }
 
-    console.log('[VideoPlayer] Inicializando Plyr player');
+    console.log('[VideoPlayer] Inicializando Plyr player por primera vez');
 
     const player = new Plyr(mediaElement, {
       controls: ['play-large', 'play', 'progress', 'current-time', 'duration', 'mute', 'volume', 'settings', 'fullscreen'],
@@ -43,14 +44,43 @@ export function VideoPlayer({
     });
 
     playerRef.current = player;
+    setIsPlayerReady(true);
+    console.log('[VideoPlayer] Plyr inicializado');
+
+    return () => {
+      console.log('[VideoPlayer] Destruyendo Plyr');
+      player.destroy();
+      playerRef.current = null;
+      setIsPlayerReady(false);
+    };
+  }, []); // Solo se ejecuta una vez al montar
+
+  // Pasar mediaElement cuando el player está listo
+  useEffect(() => {
+    const mediaElement = videoRef.current;
+    if (!mediaElement || !isPlayerReady) {
+      return;
+    }
+
+    console.log('[VideoPlayer] MediaElement listo, pasando a TimelinePanel');
     onMediaReady(mediaElement);
-    console.log('[VideoPlayer] MediaElement pasado a TimelinePanel');
+
+    return () => {
+      onMediaReady(null);
+    };
+  }, [isPlayerReady, onMediaReady]);
+
+  // Event listeners para el video
+  useEffect(() => {
+    const mediaElement = videoRef.current;
+    if (!mediaElement) {
+      return;
+    }
 
     function handleTimeUpdate(): void {
       if (!videoRef.current) {
         return;
       }
-
       onTimeUpdate(videoRef.current.currentTime);
     }
 
@@ -60,7 +90,7 @@ export function VideoPlayer({
       }
 
       const duration = videoRef.current.duration || 0;
-      console.log('[VideoPlayer] loadedmetadata - Duración:', duration, 'segundos');
+      console.log('[VideoPlayer] ✓ loadedmetadata - Duración:', duration, 'segundos');
       onDurationChange(duration);
     }
 
@@ -70,16 +100,16 @@ export function VideoPlayer({
       }
 
       const duration = videoRef.current.duration || 0;
-      console.log('[VideoPlayer] durationchange - Duración:', duration, 'segundos');
+      console.log('[VideoPlayer] ✓ durationchange - Duración:', duration, 'segundos');
       onDurationChange(duration);
     }
 
     function handleLoadedData(): void {
-      console.log('[VideoPlayer] loadeddata - Video data cargada');
+      console.log('[VideoPlayer] ✓ loadeddata - Video data cargada');
     }
 
     function handleCanPlay(): void {
-      console.log('[VideoPlayer] canplay - Video listo para reproducir');
+      console.log('[VideoPlayer] ✓ canplay - Video listo para reproducir');
     }
 
     mediaElement.addEventListener('timeupdate', handleTimeUpdate);
@@ -94,12 +124,10 @@ export function VideoPlayer({
       mediaElement.removeEventListener('durationchange', handleDurationChange);
       mediaElement.removeEventListener('loadeddata', handleLoadedData);
       mediaElement.removeEventListener('canplay', handleCanPlay);
-      onMediaReady(null);
-      player.destroy();
-      playerRef.current = null;
     };
-  }, [onDurationChange, onMediaReady, onTimeUpdate]);
+  }, [onDurationChange, onTimeUpdate]);
 
+  // Cargar el video cuando cambia
   useEffect(() => {
     const mediaElement = videoRef.current;
     if (!mediaElement) {
@@ -113,28 +141,34 @@ export function VideoPlayer({
       return;
     }
 
-    console.log('[VideoPlayer] Cargando nuevo video:', video.fileName);
-    console.log('[VideoPlayer] URL del video:', video.localUrl);
+    console.log('[VideoPlayer] 🎬 Cargando video:', video.fileName);
+    console.log('[VideoPlayer] URL:', video.localUrl);
     
     mediaElement.src = video.localUrl;
     mediaElement.load();
 
-    // Forzar la carga de metadatos
+    // Polling para forzar detección de metadatos
     const checkMetadata = setInterval(() => {
       if (mediaElement.readyState >= 1) {
-        console.log('[VideoPlayer] Metadatos cargados - readyState:', mediaElement.readyState);
-        console.log('[VideoPlayer] Duración detectada:', mediaElement.duration);
+        const readyStateNames = ['HAVE_NOTHING', 'HAVE_METADATA', 'HAVE_CURRENT_DATA', 'HAVE_FUTURE_DATA', 'HAVE_ENOUGH_DATA'];
+        console.log(`[VideoPlayer] ReadyState: ${mediaElement.readyState} (${readyStateNames[mediaElement.readyState]})`);
+        
         if (mediaElement.duration && isFinite(mediaElement.duration)) {
+          console.log('[VideoPlayer] ✓ Duración forzada:', mediaElement.duration, 'segundos');
           onDurationChange(mediaElement.duration);
           clearInterval(checkMetadata);
         }
       }
     }, 100);
 
-    setTimeout(() => clearInterval(checkMetadata), 5000);
+    setTimeout(() => {
+      clearInterval(checkMetadata);
+      console.log('[VideoPlayer] Timeout de polling alcanzado');
+    }, 5000);
 
   }, [video, onDurationChange]);
 
+  // Sincronizar tiempo cuando se solicita seek
   useEffect(() => {
     const mediaElement = videoRef.current;
     if (!mediaElement || !video || !Number.isFinite(requestedTime)) {

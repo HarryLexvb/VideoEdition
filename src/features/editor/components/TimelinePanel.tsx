@@ -48,8 +48,14 @@ export function TimelinePanel({
 
   useEffect(() => {
     if (!containerRef.current || !mediaElement) {
+      console.log('[TimelinePanel] Esperando containerRef y mediaElement');
+      console.log('[TimelinePanel] containerRef:', !!containerRef.current, 'mediaElement:', !!mediaElement);
       return;
     }
+
+    console.log('[TimelinePanel] ✓ Inicializando WaveSurfer');
+    console.log('[TimelinePanel] MediaElement readyState:', mediaElement.readyState);
+    console.log('[TimelinePanel] MediaElement duration:', mediaElement.duration);
 
     const regionsPlugin = RegionsPlugin.create();
     const waveSurfer = WaveSurfer.create({
@@ -71,6 +77,8 @@ export function TimelinePanel({
 
     waveSurferRef.current = waveSurfer;
     regionsPluginRef.current = regionsPlugin;
+
+    console.log('[TimelinePanel] ✓ WaveSurfer creado exitosamente');
 
     waveSurfer.on('interaction', (newTime: number) => {
       onSeek(newTime);
