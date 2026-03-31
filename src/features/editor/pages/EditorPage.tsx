@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import Dashboard from '@uppy/react/dashboard';
 import { AlertCircle, Download, Sparkles } from 'lucide-react';
@@ -60,8 +60,8 @@ export function EditorPage() {
   const extractAudioMutation = useStartExtractAudioJob();
   const jobStatusQuery = useProcessingJob(activeJobContext?.jobId ?? null);
 
-  const handleVideoSelected = useCallback(
-    (file: File) => {
+  const { uppy, isDashboardOpen, setDashboardOpen, isTusEnabled, uploadProgress, uploadError } = useVideoUpload({
+    onVideoSelected: (file: File) => {
       if (previousObjectUrlRef.current) {
         URL.revokeObjectURL(previousObjectUrlRef.current);
       }
@@ -80,12 +80,10 @@ export function EditorPage() {
 
       setUiError(null);
       setUiMessage('Video cargado correctamente. Define cortes en la linea de tiempo.');
+      
+      // Cerrar modal automáticamente después de la carga
+      setTimeout(() => setDashboardOpen(false), 100);
     },
-    [setVideo],
-  );
-
-  const { uppy, isDashboardOpen, setDashboardOpen, isTusEnabled, uploadProgress, uploadError } = useVideoUpload({
-    onVideoSelected: handleVideoSelected,
     onUploadIdReceived: setVideoUploadId,
     onUploadStateChange: setUploadState,
   });
@@ -237,7 +235,14 @@ export function EditorPage() {
                 proudlyDisplayPoweredByUppy={false}
                 hideUploadButton={!isTusEnabled}
                 height={360}
-                note="Formatos de video. Tamano maximo 2 GB."
+                note="Arrastra tu video aquí o haz click para seleccionar. Máximo 2 GB."
+                locale={{
+                  strings: {
+                    dropPasteBoth: 'Arrastra el video aquí, pega o %{browseFiles}',
+                    dropPasteFiles: 'Arrastra el video aquí o %{browseFiles}',
+                    browseFiles: 'haz click para seleccionar',
+                  },
+                }}
               />
             </div>
           </div>

@@ -6,58 +6,62 @@ Editor de video no destructivo construido con tecnologías web modernas. VideoCu
 
 Este proyecto cuenta **únicamente con frontend funcional**. No existe backend implementado.
 
-El frontend está completamente operativo para:
-- Cargar videos desde el equipo local del usuario
-- Visualizar videos en vista previa con reproductor Plyr profesional
-- Generar waveform de audio en línea de tiempo interactiva
-- Marcar y editar segmentos keep/remove
-- Sistema undo/redo completo
-- Dark mode y light mode con persistencia
+### Funcionalidades Operativas
 
-El frontend está preparado arquitectónicamente para integrarse con un backend futuro mediante contratos API claramente definidos, pero actualmente toda la funcionalidad opera del lado del cliente.
-
-## Características Principales
-
-**Carga de video local**
-- Upload mediante drag & drop con Uppy
+**Carga de video:**
+- Modal intuitivo con instrucciones claras ("Arrastra tu video aquí o haz click para seleccionar")
+- Drag & drop funcional
 - Validación de archivos de video
 - Tamaño máximo 2 GB
-- Creación de Object URL para preview inmediato
-- Preparado para Tus (resumable uploads) cuando se configure backend
+- Cierre automático del modal al cargar el video
+- Preview inmediato con Object URL
 
-**Vista previa profesional**
-- Reproductor Plyr con controles completos
-- Play, pause, seek, mute, volumen
+**Vista previa:**
+- Reproductor Plyr profesional con controles completos
+- Play, pause, seek, mute, volumen, fullscreen
 - Control de velocidad (0.5x a 2x)
-- Fullscreen
 - Detección automática de duración y metadatos
 - Sincronización en tiempo real con timeline
-- Estado vacío elegante cuando no hay video
+- Estado vacío elegante cuando no hay video cargado
 
-**Línea de tiempo interactiva**
+**Línea de tiempo interactiva:**
 - Waveform de audio generado con WaveSurfer.js
 - Visualización de todos los segmentos del video
 - Segmentos keep (verde) y remove (rojo)
-- Click para seleccionar segmentos
-- Drag para navegar por el video
+- Click para seleccionar y navegar
+- Drag to seek
 - Cursor rojo sincronizado con playhead
 - Cortes precisos en posición actual
-- Estadísticas de segmentos en tiempo real
+- Estadísticas visuales de segmentos
 
-**Sistema de edición**
+**Sistema de edición:**
 - Marcación de segmentos no destructiva
-- Cortes en posición del playhead (Ctrl+K)
+- Cortes con botón o teclas
 - Cambio de disposición keep/remove
 - Undo/Redo completo (Ctrl+Z / Ctrl+Shift+Z)
 - Historial de cambios con timestamps
-- Preview de segmentos seleccionados
 
-**Sistema de temas**
+**Sistema de temas:**
 - Dark mode y light mode
 - Persistencia en localStorage
 - Detección automática de preferencia del sistema
 - Transiciones suaves
-- Cobertura completa en todos los componentes
+
+### Limitaciones Actuales
+
+**No implementado (requiere backend):**
+- Export real de video editado
+- Extracción de audio procesada
+- Procesamiento con FFmpeg
+- Sistema de jobs con cola
+- Upload reanudable Tus (sin endpoint)
+- Almacenamiento persistente de proyectos
+- Autenticación y usuarios
+
+**Conocido (frontend):**
+- La línea de tiempo se genera automáticamente al cargar el video
+- El modal de carga muestra instrucciones claras
+- Todo el procesamiento es visual, no hay renderizado real del video
 
 ## Stack Tecnológico
 
@@ -71,183 +75,133 @@ El frontend está preparado arquitectónicamente para integrarse con un backend 
 - CSS Variables para theming dinámico
 - Google Fonts (Manrope, Space Grotesk)
 
-**Estado y Data Fetching:**
+**Estado:**
 - Zustand 5.0.12 (estado local + historial undo/redo)
-- TanStack Query 5.96.0 (preparado para estado servidor + polling)
+- TanStack Query 5.96.0 (preparado para estado servidor)
 
-**Librerías de UI/Funcionalidad:**
-- Uppy 5.x (file upload + Tus protocol)
-- Plyr 3.8.4 (video player profesional)
+**Librerías UI:**
+- Uppy 5.x (file upload)
+- Plyr 3.8.4 (video player)
 - Wavesurfer.js 7.12.5 (waveform + timeline + regions)
 - Lucide React 1.7.0 (iconografía)
-- React Router DOM 6.30.1 (routing SPA)
+- React Router DOM 6.30.1 (routing)
 
 ## Estructura del Proyecto
 
 ```
 src/
 ├── features/editor/          # Feature principal de edición
-│   ├── api/                  # Cliente HTTP + hooks de TanStack Query
+│   ├── api/                  # Cliente HTTP + hooks
 │   ├── components/           # HeaderBar, VideoPlayer, Timeline, Sidebar
-│   ├── hooks/                # useVideoUpload (Uppy + Tus)
-│   ├── model/                # Tipos, lógica de negocio, transformadores
-│   ├── pages/                # EditorPage (orquestación principal)
-│   └── store/                # Zustand store con historial undo/redo
-├── router/                   # Configuración de rutas (lazy loading)
+│   ├── hooks/                # useVideoUpload (Uppy)
+│   ├── model/                # Tipos, lógica de negocio
+│   ├── pages/                # EditorPage (orquestación)
+│   └── store/                # Zustand store con undo/redo
+├── router/                   # Configuración de rutas
 ├── shared/
 │   ├── components/           # Button, StatusBadge, ThemeToggle
 │   ├── contexts/             # ThemeContext (dark mode)
-│   └── lib/                  # Utilidades (formatTime, ids, classnames)
-└── styles/                   # Estilos globales y variables CSS
+│   └── lib/                  # Utilidades
+└── styles/                   # Estilos globales
 ```
-
-## Requisitos Previos
-
-- Node.js 18 o superior
-- npm 9 o superior
 
 ## Instalación
 
 ```bash
-# Clonar repositorio
 git clone https://github.com/HarryLexvb/VideoEdition.git
 cd VideoEdition
-
-# Instalar dependencias
 npm install
 ```
 
 ## Ejecución Local
 
-### Desarrollo
-
 ```bash
-# Iniciar servidor de desarrollo
+# Desarrollo
 npm run dev
 
-# O abrir navegador automáticamente
+# Desarrollo + abrir navegador
 npm run dev:open
 ```
 
-El proyecto estará disponible en `http://localhost:5173/`
-
-Los scripts usan `--strictPort`, por lo que si el puerto 5173 está ocupado, verás un error explícito.
-
-### Scripts Disponibles
-
-```bash
-npm run dev          # Servidor de desarrollo
-npm run dev:open     # Desarrollo + abrir navegador
-npm run typecheck    # Verificación de tipos TypeScript
-npm run build        # Build de producción
-npm run preview      # Preview del build de producción
-```
+Disponible en `http://localhost:5173/`
 
 ## Cómo Usar el Editor
 
-1. **Cargar video:** Click en "Cargar video" en el HeaderBar
-2. **Seleccionar archivo:** Arrastra un video o selecciónalo desde el diálogo
-3. **Vista previa:** El video aparece automáticamente en el reproductor
-4. **Timeline:** La línea de tiempo genera el waveform del audio
-5. **Editar:** 
+1. **Cargar video:**
+   - Click en "Cargar video" en el HeaderBar
+   - Se abre un modal con instrucciones claras
+   - Arrastra tu video o haz click para seleccionar
+   - El modal se cierra automáticamente al cargar
+
+2. **Vista previa:**
+   - El video aparece en el reproductor Plyr
+   - Usa los controles para reproducir/pausar
+   - Ajusta la velocidad si lo necesitas
+
+3. **Timeline:**
+   - La línea de tiempo se genera automáticamente
+   - El waveform muestra el audio del video
+   - El cursor rojo se sincroniza con la reproducción
+
+4. **Editar:**
    - Click en la timeline para mover el playhead
    - Click en "Cortar en cabezal" para crear un corte
    - Click en segmentos para seleccionarlos
    - Cambia disposición keep/remove desde el sidebar
-6. **Undo/Redo:** Ctrl+Z para deshacer, Ctrl+Shift+Z para rehacer
 
-## Variables de Entorno
+5. **Undo/Redo:**
+   - Ctrl+Z para deshacer
+   - Ctrl+Shift+Z para rehacer
 
-Copia `.env.example` a `.env` y configura según necesites:
+## Scripts Disponibles
+
+```bash
+npm run dev          # Servidor de desarrollo
+npm run dev:open     # Desarrollo + abrir navegador
+npm run typecheck    # Verificación TypeScript
+npm run build        # Build de producción
+npm run preview      # Preview del build
+```
+
+## Variables de Entorno (Futuro)
 
 ```env
-# URL base del backend (para cuando se implemente)
+# Para cuando se implemente backend
 VITE_API_BASE_URL=http://localhost:8080/api
-
-# Endpoint Tus para uploads reanudables (opcional en desarrollo)
 VITE_TUS_ENDPOINT=http://localhost:8080/files
 ```
 
-**Importante:** Actualmente estas variables están preparadas para uso futuro. El frontend funciona completamente en modo local sin necesidad de backend. Los videos se cargan como Object URLs y se procesan del lado del cliente.
+Actualmente el frontend funciona sin estas variables. Los videos se cargan como Object URLs del lado del cliente.
 
 ## Sincronización Preview y Timeline
 
-El proyecto implementa sincronización bidireccional entre el reproductor de video y la línea de tiempo:
-
 **Preview → Timeline:**
 - Al reproducir el video, el cursor de la timeline se mueve en tiempo real
-- La posición se actualiza mediante el evento `timeupdate` del elemento video
-- WaveSurfer sincroniza su posición usando `setTime()`
+- Actualización mediante evento `timeupdate` del elemento video
+- WaveSurfer sincroniza con `setTime()`
 
 **Timeline → Preview:**
-- Al hacer click en la timeline, el video salta a esa posición
-- Al seleccionar un segmento, el video se posiciona al inicio del segmento
-- Drag to seek habilitado para navegación fluida
-
-## Preparación para Backend (Futuro)
-
-El frontend está diseñado con contratos API claros para integración futura:
-
-### Endpoints Esperados
-
-**`POST /jobs/export`**
-- Envía información del video y segmentos marcados
-- Retorna jobId para seguimiento con polling
-
-**`POST /jobs/extract-audio`**
-- Extracción de audio del video editado
-- Retorna jobId para seguimiento
-
-**`GET /jobs/:id`**
-- Consulta estado de un job (queued, processing, completed, failed)
-- TanStack Query realiza polling automático
-
-### Payload de Ejemplo
-
-```json
-{
-  "source": {
-    "fileName": "video.mp4",
-    "mimeType": "video/mp4",
-    "size": 12345678,
-    "uploadId": "opcional-tus-id"
-  },
-  "timeline": [
-    { "id": "segment_1", "start": 0, "end": 5.2, "disposition": "keep" },
-    { "id": "segment_2", "start": 5.2, "end": 12.8, "disposition": "remove" }
-  ],
-  "meta": {
-    "duration": 12.8,
-    "keepSegmentCount": 1,
-    "removeSegmentCount": 1
-  }
-}
-```
-
-Ver `src/features/editor/api/client.ts` y `src/features/editor/model/projectPayload.ts` para detalles.
+- Click en la timeline posiciona el video
+- Seleccionar segmento mueve al inicio
+- Drag to seek habilitado
 
 ## Build para Producción
 
 ```bash
-# Generar build optimizado
 npm run build
-
-# Preview local del build
 npm run preview
 ```
 
-El build final se genera en `dist/`.
+Output en `dist/` (~869 KB, gzipped: ~245 KB)
 
 ## Deployment
 
-El proyecto es una SPA (Single Page Application) estándar. Puede desplegarse en:
+SPA estándar, compatible con:
+- Vercel, Netlify, GitHub Pages
+- VPS con Nginx (configurar reescritura de rutas)
+- CDN para contenido estático
 
-- Servicios estáticos: Vercel, Netlify, GitHub Pages, Cloudflare Pages
-- VPS con Nginx (configurar reescritura de rutas para SPA)
-- CDN: Subir contenido de `dist/` a cualquier CDN
-
-### Ejemplo de configuración Nginx para SPA:
-
+**Ejemplo Nginx:**
 ```nginx
 server {
   listen 80;
@@ -261,50 +215,48 @@ server {
 }
 ```
 
-## Limitaciones Actuales
+## Próximos Pasos para Backend
 
-**No implementado:**
-- Backend para procesamiento de video
-- Sistema de jobs con cola
-- Procesamiento con FFmpeg
-- Export real de video editado
-- Extracción real de audio
-- Upload reanudable (Tus requiere backend)
-- Autenticación y usuarios
-- Almacenamiento persistente de proyectos
+Para completar el proyecto se necesita:
 
-**Funcional actualmente:**
-- Carga de video local
-- Vista previa con reproductor completo
-- Timeline interactiva con waveform
-- Edición no destructiva de segmentos
-- Sistema undo/redo
-- Dark mode
-- Sincronización preview/timeline
-- Keyboard shortcuts
+1. **Backend API:**
+   - Express/Fastify con endpoints de jobs
+   - POST `/jobs/export` y `/jobs/extract-audio`
+   - GET `/jobs/:id` para polling
 
-## Próximos Pasos
-
-Para continuar el desarrollo:
-
-1. **Backend:**
-   - API REST con Express/Fastify
+2. **Procesamiento:**
    - Sistema de jobs con Bull/BullMQ
-   - Procesamiento con FFmpeg
-   - Storage S3/Cloudflare R2
-   - Autenticación JWT
+   - FFmpeg para procesamiento de video
+   - Merge de segmentos keep
+   - Eliminación de segmentos remove
 
-2. **Frontend:**
-   - Testing (Vitest + React Testing Library)
-   - ESLint + Prettier
-   - Pre-commit hooks (husky)
-   - Error boundaries
-   - Más keyboard shortcuts
+3. **Storage:**
+   - S3/Cloudflare R2 para videos procesados
+   - Upload reanudable con Tus
 
-3. **DevOps:**
-   - CI/CD pipeline
-   - Deployment automatizado
-   - Monitoreo y logging
+4. **Autenticación:**
+   - JWT para usuarios
+   - Gestión de proyectos guardados
+
+## Mejoras Futuras Frontend
+
+- Testing (Vitest + React Testing Library)
+- ESLint + Prettier
+- Pre-commit hooks (husky)
+- Error boundaries
+- Más keyboard shortcuts
+- Export/Import de proyecto como JSON
+
+## Problemas Conocidos y Soluciones
+
+**P: El modal de carga está en blanco**
+R: Corregido. Ahora muestra claramente "Arrastra tu video aquí o haz click para seleccionar"
+
+**P: La timeline no aparece aunque haya video**
+R: La timeline se genera automáticamente al cargar el video. Verifica que el archivo sea un video válido.
+
+**P: El video no se reproduce**
+R: Verifica que el formato sea compatible con el navegador (MP4, WebM, OGG)
 
 ## Autor
 
@@ -320,9 +272,9 @@ https://github.com/HarryLexvb/VideoEdition
 
 ## Licencia
 
-Este proyecto es privado y de uso personal/educativo.
+Proyecto privado y de uso personal/educativo.
 
 ---
 
 **Última actualización:** Marzo 2026
-**Versión:** 0.1.0 (Frontend funcional completo)
+**Versión:** 0.1.1 (Modal de carga mejorado, instrucciones claras)
