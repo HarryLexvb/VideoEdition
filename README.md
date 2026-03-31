@@ -1,82 +1,75 @@
 # VideoCut Studio
 
-Editor de video no destructivo construido con tecnologías web modernas. Interfaz profesional para cargar videos locales, visualizarlos con controles completos y editar segmentos mediante línea de tiempo interactiva con waveform.
+Editor de video no destructivo con interfaz profesional para cargar videos locales, visualizarlos y editar segmentos mediante línea de tiempo interactiva con waveform.
 
 ## Estado Actual
 
 **Frontend 100% funcional - Sin backend implementado**
 
-### Funcionalidades Operativas
+### Funcionando
 
-**Carga de video intuitiva:**
-- Modal visual con instrucciones claras y prominentes
-- Banner destacado: "Arrastra tu video aquí"
-- Iconos visuales (FileVideo, Upload)
-- Badges con información: "Máximo 2 GB", formatos soportados
-- Drag & drop completamente funcional
-- Cierre automático al cargar el video
-
-**Vista previa profesional:**
-- Reproductor Plyr con controles completos
-- Play, pause, seek, mute, volumen, fullscreen
-- Control de velocidad (0.5x a 2x)
-- Detección automática de metadatos
-- Sincronización en tiempo real con timeline
-
-**Línea de tiempo interactiva:**
-- Waveform de audio generado automáticamente con WaveSurfer.js
-- Se genera cuando el video tiene metadatos cargados
-- Visualización de segmentos keep (verde) y remove (rojo)
-- Click para seleccionar y navegar
-- Cursor rojo sincronizado con reproducción
-- Estadísticas visuales
-
-**Edición no destructiva:**
-- Cortes en posición del playhead
-- Cambio de disposición keep/remove
+- Carga de video con modal visual claro
+- Vista previa con Plyr
+- **Timeline con WaveSurfer (se genera cuando hay metadatos)**
+- Edición de segmentos keep/remove
 - Undo/Redo (Ctrl+Z / Ctrl+Shift+Z)
-- Historial completo con timestamps
+- Dark mode completo
 
-**Dark mode:**
-- Persistencia en localStorage
-- Detección automática de preferencia del sistema
-- Cobertura completa
+### Cómo Usar
 
-### Cómo Funciona
+1. **Cargar video:** Click en "Cargar video"
+2. **Modal visual:** Aparece con "Arrastra tu video aquí"
+3. **Seleccionar:** Arrastra o haz click para seleccionar
+4. **Esperar:** El video carga metadatos (puede tardar unos segundos)
+5. **Timeline:** Se genera automáticamente cuando los metadatos están listos
 
-1. **Cargar:** Click en "Cargar video" → Modal con instrucciones visuales claras
-2. **Arrastra o selecciona:** El área muestra claramente qué hacer
-3. **Espera:** El video carga metadatos (duración, dimensiones)
-4. **Timeline:** Se genera automáticamente cuando los metadatos están listos
-5. **Edita:** Usa los controles para marcar segmentos
+## DEBUG: Si la Timeline No Aparece
 
-### Debug y Monitoreo
+**Abre DevTools (F12) → Console y busca:**
 
-El footer muestra información de debug:
-- Estado del mediaElement: "conectado" o "desconectado"
-- Video cargado con su nombre y duración
-- Logs en consola del navegador para troubleshooting
+```
+[VideoPlayer] Cargando nuevo video: nombre.mp4
+[VideoPlayer] URL del video: blob:...
+[VideoPlayer] Metadatos cargados - readyState: 1 o superior
+[VideoPlayer] Duración detectada: XX.XX
+[VideoPlayer] loadedmetadata - Duración: XX.XX segundos
+```
 
-## Stack Tecnológico
+**Si NO ves estos logs:**
+- El video no se está cargando correctamente
+- Prueba con un video diferente (MP4 H.264)
+- Verifica que el archivo no esté corrupto
 
-**Core:**
-- React 19.2.4
-- TypeScript 5.9.3 (strict)
-- Vite 8.0.1
+**Si ves los logs pero la duración es 0 o NaN:**
+- El navegador no puede leer los metadatos del video
+- Prueba con un video más simple (MP4 con H.264/AAC)
+- Algunos formatos o códecs no son compatibles
 
-**UI:**
-- Tailwind CSS 3.4.17
-- Lucide React 1.7.0
-- Google Fonts
+**Si la duración se detecta pero la timeline no aparece:**
+- Revisa en footer si dice "Media: conectado"
+- Verifica en console: `[EditorPage] mediaElement actualizado`
+- Si no aparece, hay un problema de comunicación entre componentes
 
-**Estado:**
-- Zustand 5.0.12 (estado + undo/redo)
-- TanStack Query 5.96.0
+## Formatos Recomendados
 
-**Media:**
-- Uppy 5.x (upload)
-- Plyr 3.8.4 (player)
-- Wavesurfer.js 7.12.5 (timeline)
+**Videos que funcionan mejor:**
+- MP4 con H.264 video + AAC audio
+- Resolución 1080p o menor
+- Bitrate razonable (no más de 10 Mbps)
+- Máximo 2 GB
+
+**Evita:**
+- Videos 4K muy pesados
+- Códecs raros o poco comunes
+- Videos con DRM
+- Archivos corruptos
+
+## Stack
+
+**Core:** React 19, TypeScript 5.9, Vite 8
+**UI:** Tailwind CSS, Lucide React
+**Media:** Uppy (upload), Plyr (player), WaveSurfer (timeline)
+**Estado:** Zustand, TanStack Query
 
 ## Instalación
 
@@ -84,87 +77,38 @@ El footer muestra información de debug:
 git clone https://github.com/HarryLexvb/VideoEdition.git
 cd VideoEdition
 npm install
+npm run dev  # http://localhost:5173
 ```
 
-## Ejecución
+## Scripts
 
 ```bash
-npm run dev        # Desarrollo en http://localhost:5173
-npm run build      # Build de producción
+npm run dev      # Desarrollo
+npm run build    # Producción
 ```
-
-## Troubleshooting
-
-**Modal aparece vacío:**
-- Solucionado en v0.1.2
-- Ahora muestra banner visual prominente con instrucciones
-- Iconos, badges y texto claramente visible
-
-**Timeline no aparece:**
-- La timeline se genera automáticamente
-- Requiere que el video cargue metadatos
-- Verifica en consola: `[EditorPage] Video seleccionado`
-- Verifica en footer: `Media: conectado`
-- Si persiste: abre DevTools → Console para ver logs
-
-**Video no se reproduce:**
-- Verifica formato compatible: MP4, WebM, MOV
-- Verifica tamaño (máximo 2 GB)
-- Verifica que el navegador soporte el códec
-
-## Logs de Debug
-
-Abre DevTools (F12) → Console para ver:
-```
-[EditorPage] Video seleccionado: nombre.mp4 URL creada: blob:...
-[EditorPage] mediaElement actualizado: Video element disponible
-[EditorPage] Video en store: nombre.mp4 (120.5s)
-```
-
-Si no ves estos logs, el video no se está cargando correctamente.
 
 ## Limitaciones
 
-**No implementado (requiere backend):**
-- Export real de video editado
+**No implementado:**
+- Export real de video
 - Extracción de audio
-- Procesamiento con FFmpeg
-- Sistema de jobs
-- Upload reanudable Tus
-- Almacenamiento persistente
-
-**Funcional actualmente:**
-- Carga de video local ✓
-- Preview con Plyr ✓
-- Timeline con WaveSurfer ✓
-- Edición de segmentos ✓
-- Undo/Redo ✓
-- Dark mode ✓
+- Procesamiento FFmpeg
+- Backend/API
+- Storage persistente
 
 ## Próximos Pasos
 
-Para completar el proyecto:
-
-1. **Backend API**
-   - Express/Fastify
-   - Endpoints: POST `/jobs/export`, `/jobs/extract-audio`, GET `/jobs/:id`
-
-2. **Procesamiento**
-   - Bull/BullMQ para jobs
-   - FFmpeg para video
-   - S3/R2 para storage
-
-3. **Autenticación**
-   - JWT
-   - Proyectos guardados
+1. Backend con Express/Fastify
+2. Jobs con Bull/BullMQ
+3. Procesamiento con FFmpeg
+4. Storage S3/R2
 
 ## Autor
 
 **Harold Alejandro Villanueva Borda**
-
 - harrylex8@gmail.com
 - harold.villanueva@gmail.com
-- GitHub: [@HarryLexvb](https://github.com/HarryLexvb)
+- [@HarryLexvb](https://github.com/HarryLexvb)
 
 ## Repositorio
 
@@ -172,5 +116,5 @@ https://github.com/HarryLexvb/VideoEdition
 
 ---
 
-**Versión:** 0.1.2 (Modal con instrucciones visuales claras + debug mejorado)
+**v0.1.3** - Debug mejorado para detección de metadatos
 **Última actualización:** Marzo 2026

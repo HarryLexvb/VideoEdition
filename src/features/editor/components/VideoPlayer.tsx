@@ -27,8 +27,11 @@ export function VideoPlayer({
   useEffect(() => {
     const mediaElement = videoRef.current;
     if (!mediaElement) {
+      console.log('[VideoPlayer] No mediaElement disponible');
       return;
     }
+
+    console.log('[VideoPlayer] Inicializando Plyr player');
 
     const player = new Plyr(mediaElement, {
       controls: ['play-large', 'play', 'progress', 'current-time', 'duration', 'mute', 'volume', 'settings', 'fullscreen'],
@@ -41,6 +44,7 @@ export function VideoPlayer({
 
     playerRef.current = player;
     onMediaReady(mediaElement);
+    console.log('[VideoPlayer] MediaElement pasado a TimelinePanel');
 
     function handleTimeUpdate(): void {
       if (!videoRef.current) {
@@ -50,22 +54,46 @@ export function VideoPlayer({
       onTimeUpdate(videoRef.current.currentTime);
     }
 
+    function handleLoadedMetadata(): void {
+      if (!videoRef.current) {
+        return;
+      }
+
+      const duration = videoRef.current.duration || 0;
+      console.log('[VideoPlayer] loadedmetadata - Duración:', duration, 'segundos');
+      onDurationChange(duration);
+    }
+
     function handleDurationChange(): void {
       if (!videoRef.current) {
         return;
       }
 
-      onDurationChange(videoRef.current.duration || 0);
+      const duration = videoRef.current.duration || 0;
+      console.log('[VideoPlayer] durationchange - Duración:', duration, 'segundos');
+      onDurationChange(duration);
+    }
+
+    function handleLoadedData(): void {
+      console.log('[VideoPlayer] loadeddata - Video data cargada');
+    }
+
+    function handleCanPlay(): void {
+      console.log('[VideoPlayer] canplay - Video listo para reproducir');
     }
 
     mediaElement.addEventListener('timeupdate', handleTimeUpdate);
-    mediaElement.addEventListener('loadedmetadata', handleDurationChange);
+    mediaElement.addEventListener('loadedmetadata', handleLoadedMetadata);
     mediaElement.addEventListener('durationchange', handleDurationChange);
+    mediaElement.addEventListener('loadeddata', handleLoadedData);
+    mediaElement.addEventListener('canplay', handleCanPlay);
 
     return () => {
       mediaElement.removeEventListener('timeupdate', handleTimeUpdate);
-      mediaElement.removeEventListener('loadedmetadata', handleDurationChange);
+      mediaElement.removeEventListener('loadedmetadata', handleLoadedMetadata);
       mediaElement.removeEventListener('durationchange', handleDurationChange);
+      mediaElement.removeEventListener('loadeddata', handleLoadedData);
+      mediaElement.removeEventListener('canplay', handleCanPlay);
       onMediaReady(null);
       player.destroy();
       playerRef.current = null;
@@ -79,14 +107,33 @@ export function VideoPlayer({
     }
 
     if (!video) {
+      console.log('[VideoPlayer] Limpiando video anterior');
       mediaElement.removeAttribute('src');
       mediaElement.load();
       return;
     }
 
+    console.log('[VideoPlayer] Cargando nuevo video:', video.fileName);
+    console.log('[VideoPlayer] URL del video:', video.localUrl);
+    
     mediaElement.src = video.localUrl;
     mediaElement.load();
-  }, [video]);
+
+    // Forzar la carga de metadatos
+    const checkMetadata = setInterval(() => {
+      if (mediaElement.readyState >= 1) {
+        console.log('[VideoPlayer] Metadatos cargados - readyState:', mediaElement.readyState);
+        console.log('[VideoPlayer] Duración detectada:', mediaElement.duration);
+        if (mediaElement.duration && isFinite(mediaElement.duration)) {
+          onDurationChange(mediaElement.duration);
+          clearInterval(checkMetadata);
+        }
+      }
+    }, 100);
+
+    setTimeout(() => clearInterval(checkMetadata), 5000);
+
+  }, [video, onDurationChange]);
 
   useEffect(() => {
     const mediaElement = videoRef.current;
