@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 
+import { FileVideo, Play } from 'lucide-react';
 import Plyr from 'plyr';
 
 import { formatTime } from '../../../shared/lib/formatTime';
@@ -34,7 +35,7 @@ export function VideoPlayer({
       settings: ['speed'],
       speed: {
         selected: 1,
-        options: [0.5, 1, 1.25, 1.5, 2],
+        options: [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2],
       },
     });
 
@@ -99,13 +100,39 @@ export function VideoPlayer({
   }, [requestedTime, video]);
 
   return (
-    <section className="rounded-3xl border border-white/40 bg-slate-950 p-4 shadow-[0_24px_55px_-30px_rgba(2,6,23,0.8)]">
-      <div className="aspect-video overflow-hidden rounded-2xl bg-slate-900">
-        <video ref={videoRef} className="h-full w-full" playsInline controls preload="metadata" aria-label="Vista previa del video" />
+    <section className="group rounded-3xl border border-white/40 bg-gradient-to-br from-slate-900 via-slate-950 to-slate-900 p-5 shadow-[0_24px_55px_-30px_rgba(2,6,23,0.9)] transition-all hover:shadow-[0_24px_65px_-25px_rgba(2,6,23,0.95)] dark:border-slate-800/60 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950">
+      <div className="relative aspect-video overflow-hidden rounded-2xl bg-slate-950 ring-1 ring-white/5">
+        {!video ? (
+          <div className="flex h-full w-full flex-col items-center justify-center gap-4 text-slate-400">
+            <div className="rounded-2xl bg-slate-800/50 p-6 ring-1 ring-white/5">
+              <FileVideo className="h-16 w-16 text-slate-500" strokeWidth={1.5} aria-hidden="true" />
+            </div>
+            <div className="text-center">
+              <p className="font-display text-lg font-semibold text-slate-300">Vista previa del video</p>
+              <p className="mt-1 text-sm text-slate-500">Carga un archivo para comenzar la edicion</p>
+            </div>
+          </div>
+        ) : (
+          <video
+            ref={videoRef}
+            className="h-full w-full"
+            playsInline
+            controls
+            preload="metadata"
+            aria-label="Vista previa del video"
+          />
+        )}
       </div>
-      <div className="mt-3 flex items-center justify-between text-xs text-slate-300">
-        <span>{video ? `Timeline sincronizado en ${formatTime(requestedTime)}` : 'Carga un video para activar el editor.'}</span>
-        <span>{video ? 'Controles Plyr activos' : 'Sin archivo'}</span>
+      <div className="mt-4 flex items-center justify-between rounded-xl bg-slate-800/40 px-4 py-2.5 ring-1 ring-white/5 backdrop-blur-sm">
+        <div className="flex items-center gap-2 text-xs text-slate-400">
+          <Play className="h-3.5 w-3.5" aria-hidden="true" />
+          <span className="font-medium">
+            {video ? `Posicion: ${formatTime(requestedTime)}` : 'Esperando archivo'}
+          </span>
+        </div>
+        <span className="text-xs font-medium text-slate-500">
+          {video ? `Duracion: ${formatTime(video.duration)}` : 'Sin video cargado'}
+        </span>
       </div>
     </section>
   );

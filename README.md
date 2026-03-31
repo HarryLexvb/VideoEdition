@@ -1,43 +1,69 @@
 # VideoCut Studio
 
-**Editor de video no destructivo** construido con tecnologías web modernas. VideoCut Studio proporciona una interfaz visual profesional para marcar segmentos de video, gestionar cortes mediante timeline interactiva, y preparar trabajos de exportación que serán procesados por un backend (actualmente no implementado).
+Editor de video no destructivo construido con tecnologías web modernas. VideoCut Studio proporciona una interfaz visual profesional para cargar videos locales, visualizarlos en una vista previa con controles completos y editar segmentos mediante una línea de tiempo interactiva con waveform de audio.
 
 ## Estado Actual del Proyecto
 
-⚠️ **Importante:** Este proyecto actualmente cuenta **únicamente con frontend funcional**. No existe backend implementado.
+Este proyecto cuenta **únicamente con frontend funcional**. No existe backend implementado.
 
-El frontend está completamente operativo y preparado para integrarse con un backend futuro mediante contratos API claramente definidos.
+El frontend está completamente operativo para:
+- Cargar videos desde el equipo local del usuario
+- Visualizar videos en vista previa con reproductor Plyr profesional
+- Generar waveform de audio en línea de tiempo interactiva
+- Marcar y editar segmentos keep/remove
+- Sistema undo/redo completo
+- Dark mode y light mode con persistencia
+
+El frontend está preparado arquitectónicamente para integrarse con un backend futuro mediante contratos API claramente definidos, pero actualmente toda la funcionalidad opera del lado del cliente.
 
 ## Características Principales
 
-✅ **Interfaz de edición visual completa**
-- Timeline interactiva con waveform de audio
-- Marcación de segmentos keep/remove
-- Preview en tiempo real con Plyr
-- Sistema undo/redo profesional (Ctrl+Z / Ctrl+Shift+Z)
+**Carga de video local**
+- Upload mediante drag & drop con Uppy
+- Validación de archivos de video
+- Tamaño máximo 2 GB
+- Creación de Object URL para preview inmediato
+- Preparado para Tus (resumable uploads) cuando se configure backend
 
-✅ **Gestión de archivos**
-- Upload local mediante drag & drop
-- Soporte para Tus (resumable uploads) preparado
-- Preview inmediato sin procesamiento pesado
+**Vista previa profesional**
+- Reproductor Plyr con controles completos
+- Play, pause, seek, mute, volumen
+- Control de velocidad (0.5x a 2x)
+- Fullscreen
+- Detección automática de duración y metadatos
+- Sincronización en tiempo real con timeline
+- Estado vacío elegante cuando no hay video
 
-✅ **Sistema de temas**
+**Línea de tiempo interactiva**
+- Waveform de audio generado con WaveSurfer.js
+- Visualización de todos los segmentos del video
+- Segmentos keep (verde) y remove (rojo)
+- Click para seleccionar segmentos
+- Drag para navegar por el video
+- Cursor rojo sincronizado con playhead
+- Cortes precisos en posición actual
+- Estadísticas de segmentos en tiempo real
+
+**Sistema de edición**
+- Marcación de segmentos no destructiva
+- Cortes en posición del playhead (Ctrl+K)
+- Cambio de disposición keep/remove
+- Undo/Redo completo (Ctrl+Z / Ctrl+Shift+Z)
+- Historial de cambios con timestamps
+- Preview de segmentos seleccionados
+
+**Sistema de temas**
 - Dark mode y light mode
-- Persistencia de preferencia en localStorage
+- Persistencia en localStorage
 - Detección automática de preferencia del sistema
-- Transiciones suaves entre temas
-
-✅ **Arquitectura moderna y escalable**
-- Feature-based modular architecture
-- TypeScript strict mode
-- Separación clara de responsabilidades
-- Preparado para integración con backend
+- Transiciones suaves
+- Cobertura completa en todos los componentes
 
 ## Stack Tecnológico
 
 **Core:**
 - React 19.2.4
-- TypeScript 5.9.3
+- TypeScript 5.9.3 (strict mode)
 - Vite 8.0.1
 
 **Estilos:**
@@ -47,12 +73,12 @@ El frontend está completamente operativo y preparado para integrarse con un bac
 
 **Estado y Data Fetching:**
 - Zustand 5.0.12 (estado local + historial undo/redo)
-- TanStack Query 5.96.0 (estado servidor + polling preparado)
+- TanStack Query 5.96.0 (preparado para estado servidor + polling)
 
 **Librerías de UI/Funcionalidad:**
 - Uppy 5.x (file upload + Tus protocol)
-- Plyr 3.8.4 (video player)
-- Wavesurfer.js 7.12.5 (waveform + timeline)
+- Plyr 3.8.4 (video player profesional)
+- Wavesurfer.js 7.12.5 (waveform + timeline + regions)
 - Lucide React 1.7.0 (iconografía)
 - React Router DOM 6.30.1 (routing SPA)
 
@@ -77,8 +103,8 @@ src/
 
 ## Requisitos Previos
 
-- **Node.js** 18 o superior
-- **npm** 9 o superior
+- Node.js 18 o superior
+- npm 9 o superior
 
 ## Instalación
 
@@ -105,13 +131,7 @@ npm run dev:open
 
 El proyecto estará disponible en `http://localhost:5173/`
 
-**Nota sobre puerto:** Los scripts usan `--strictPort`, por lo que si el puerto 5173 está ocupado, verás un error explícito en lugar de asignarse otro puerto automáticamente.
-
-Para liberar el puerto en Windows si es necesario:
-```powershell
-$conn = Get-NetTCPConnection -LocalPort 5173 -State Listen -ErrorAction SilentlyContinue
-if ($conn) { Stop-Process -Id $conn.OwningProcess -Force }
-```
+Los scripts usan `--strictPort`, por lo que si el puerto 5173 está ocupado, verás un error explícito.
 
 ### Scripts Disponibles
 
@@ -123,61 +143,64 @@ npm run build        # Build de producción
 npm run preview      # Preview del build de producción
 ```
 
+## Cómo Usar el Editor
+
+1. **Cargar video:** Click en "Cargar video" en el HeaderBar
+2. **Seleccionar archivo:** Arrastra un video o selecciónalo desde el diálogo
+3. **Vista previa:** El video aparece automáticamente en el reproductor
+4. **Timeline:** La línea de tiempo genera el waveform del audio
+5. **Editar:** 
+   - Click en la timeline para mover el playhead
+   - Click en "Cortar en cabezal" para crear un corte
+   - Click en segmentos para seleccionarlos
+   - Cambia disposición keep/remove desde el sidebar
+6. **Undo/Redo:** Ctrl+Z para deshacer, Ctrl+Shift+Z para rehacer
+
 ## Variables de Entorno
 
 Copia `.env.example` a `.env` y configura según necesites:
 
 ```env
-# URL base del backend (obligatorio cuando se implemente backend)
+# URL base del backend (para cuando se implemente)
 VITE_API_BASE_URL=http://localhost:8080/api
 
 # Endpoint Tus para uploads reanudables (opcional en desarrollo)
 VITE_TUS_ENDPOINT=http://localhost:8080/files
 ```
 
-**Importante:** Actualmente estas variables están preparadas para uso futuro. El frontend funciona completamente en modo local sin necesidad de backend.
+**Importante:** Actualmente estas variables están preparadas para uso futuro. El frontend funciona completamente en modo local sin necesidad de backend. Los videos se cargan como Object URLs y se procesan del lado del cliente.
 
-## Modo Oscuro (Dark Mode)
+## Sincronización Preview y Timeline
 
-El proyecto incluye un sistema de temas completo:
+El proyecto implementa sincronización bidireccional entre el reproductor de video y la línea de tiempo:
 
-- **Toggle manual:** Botón en la esquina superior derecha del HeaderBar
-- **Persistencia:** La preferencia se guarda en localStorage
-- **Detección automática:** Si no hay preferencia guardada, se usa `prefers-color-scheme`
-- **Cobertura completa:** Todos los componentes, surfaces, textos y estados interactivos soportan ambos temas
+**Preview → Timeline:**
+- Al reproducir el video, el cursor de la timeline se mueve en tiempo real
+- La posición se actualiza mediante el evento `timeupdate` del elemento video
+- WaveSurfer sincroniza su posición usando `setTime()`
 
-## Flujo de Edición Actual (Frontend)
-
-1. Usuario carga un archivo de video mediante Uppy Dashboard
-2. Se crea una URL local (blob) para preview inmediato en Plyr
-3. WaveSurfer renderiza el waveform usando el elemento `<video>`
-4. Usuario marca segmentos en la timeline (cortes)
-5. Cada segmento se marca como `keep` o `remove`
-6. El sistema undo/redo opera sobre snapshots de estado
-7. Al exportar o extraer audio:
-   - Se construye un payload con la información de segmentos
-   - Se prepara para enviar al backend (cuando esté disponible)
-   - TanStack Query realizaría polling del estado del job
-
-**Nota:** Las operaciones de exportación y extracción de audio actualmente construyen el payload correctamente pero requieren un backend para procesarse.
+**Timeline → Preview:**
+- Al hacer click en la timeline, el video salta a esa posición
+- Al seleccionar un segmento, el video se posiciona al inicio del segmento
+- Drag to seek habilitado para navegación fluida
 
 ## Preparación para Backend (Futuro)
 
-El frontend está diseñado con contratos API claros preparados para integración:
+El frontend está diseñado con contratos API claros para integración futura:
 
 ### Endpoints Esperados
 
 **`POST /jobs/export`**
-- Envía información del video y segmentos
-- Retorna jobId para seguimiento
+- Envía información del video y segmentos marcados
+- Retorna jobId para seguimiento con polling
 
 **`POST /jobs/extract-audio`**
-- Similar a export, enfocado en extracción de audio
+- Extracción de audio del video editado
 - Retorna jobId para seguimiento
 
 **`GET /jobs/:id`**
 - Consulta estado de un job (queued, processing, completed, failed)
-- TanStack Query realiza polling automático hasta completarse
+- TanStack Query realiza polling automático
 
 ### Payload de Ejemplo
 
@@ -201,7 +224,7 @@ El frontend está diseñado con contratos API claros preparados para integració
 }
 ```
 
-Ver `src/features/editor/api/client.ts` y `src/features/editor/model/projectPayload.ts` para más detalles.
+Ver `src/features/editor/api/client.ts` y `src/features/editor/model/projectPayload.ts` para detalles.
 
 ## Build para Producción
 
@@ -213,15 +236,15 @@ npm run build
 npm run preview
 ```
 
-El build final se genera en el directorio `dist/`.
+El build final se genera en `dist/`.
 
 ## Deployment
 
 El proyecto es una SPA (Single Page Application) estándar. Puede desplegarse en:
 
-- **Servicios estáticos:** Vercel, Netlify, GitHub Pages, Cloudflare Pages
-- **VPS con Nginx:** Configurar reescritura de rutas para SPA
-- **CDN:** Subir contenido de `dist/` a cualquier CDN
+- Servicios estáticos: Vercel, Netlify, GitHub Pages, Cloudflare Pages
+- VPS con Nginx (configurar reescritura de rutas para SPA)
+- CDN: Subir contenido de `dist/` a cualquier CDN
 
 ### Ejemplo de configuración Nginx para SPA:
 
@@ -238,32 +261,50 @@ server {
 }
 ```
 
-**Importante:** Si frontend y backend estarán en dominios distintos, habilita CORS en el backend y considera usar HTTPS.
+## Limitaciones Actuales
 
-## Próximos Pasos Reales
+**No implementado:**
+- Backend para procesamiento de video
+- Sistema de jobs con cola
+- Procesamiento con FFmpeg
+- Export real de video editado
+- Extracción real de audio
+- Upload reanudable (Tus requiere backend)
+- Autenticación y usuarios
+- Almacenamiento persistente de proyectos
 
-Para continuar el desarrollo de este proyecto:
+**Funcional actualmente:**
+- Carga de video local
+- Vista previa con reproductor completo
+- Timeline interactiva con waveform
+- Edición no destructiva de segmentos
+- Sistema undo/redo
+- Dark mode
+- Sincronización preview/timeline
+- Keyboard shortcuts
 
-1. **Implementar backend:**
-   - Endpoints de procesamiento de video (`/jobs/export`, `/jobs/extract-audio`)
-   - Sistema de jobs con cola (p. ej., Bull, BullMQ)
+## Próximos Pasos
+
+Para continuar el desarrollo:
+
+1. **Backend:**
+   - API REST con Express/Fastify
+   - Sistema de jobs con Bull/BullMQ
    - Procesamiento con FFmpeg
-   - Endpoint de estado de jobs (`GET /jobs/:id`)
-   - Storage para archivos procesados
+   - Storage S3/Cloudflare R2
+   - Autenticación JWT
 
-2. **Mejorar frontend:**
+2. **Frontend:**
    - Testing (Vitest + React Testing Library)
-   - Linting (ESLint) y formatting (Prettier)
-   - Pre-commit hooks (husky + lint-staged)
+   - ESLint + Prettier
+   - Pre-commit hooks (husky)
    - Error boundaries
    - Más keyboard shortcuts
-   - Mejoras de accesibilidad (a11y)
 
 3. **DevOps:**
    - CI/CD pipeline
-   - Despliegue automatizado
+   - Deployment automatizado
    - Monitoreo y logging
-   - CDN para assets estáticos
 
 ## Autor
 
@@ -275,7 +316,7 @@ Para continuar el desarrollo de este proyecto:
 
 ## Repositorio
 
-🔗 https://github.com/HarryLexvb/VideoEdition
+https://github.com/HarryLexvb/VideoEdition
 
 ## Licencia
 
@@ -283,5 +324,5 @@ Este proyecto es privado y de uso personal/educativo.
 
 ---
 
-**Última actualización:** Marzo 2026  
-**Versión del proyecto:** 0.0.0 (Prototipo funcional de frontend)
+**Última actualización:** Marzo 2026
+**Versión:** 0.1.0 (Frontend funcional completo)
