@@ -277,7 +277,7 @@ export function EditorPage() {
                     </h3>
                     <p className="mt-1 flex items-center gap-1.5 text-sm text-slate-600 dark:text-slate-400">
                       <MousePointerClick className="h-4 w-4" aria-hidden="true" />
-                      <span>Puedes hacer <strong>click en el área de abajo</strong> o arrastrar un archivo</span>
+                      <span>Haz <strong>click en el área gris de abajo</strong> o arrastra un archivo</span>
                     </p>
                     <div className="mt-3 flex flex-wrap gap-2">
                       <span className="rounded-lg bg-white px-2.5 py-1 text-xs font-medium text-slate-700 ring-1 ring-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:ring-slate-700">
@@ -292,22 +292,21 @@ export function EditorPage() {
                 </div>
               </div>
 
-              {/* Dashboard de Uppy con configuración mejorada */}
+              {/* Dashboard de Uppy - Configuración correcta */}
               <div className="p-5">
                 <Dashboard
                   uppy={uppy}
-                  inline
                   proudlyDisplayPoweredByUppy={false}
+                  showProgressDetails
                   hideUploadButton={!isTusEnabled}
-                  height={320}
-                  width="100%"
-                  note="💡 Haz click en el área o arrastra tu archivo aquí"
+                  height={350}
+                  note="💡 Haz click en esta área o arrastra tu video aquí"
                   locale={{
                     strings: {
-                      dropPasteBoth: '📁 Suelta el video aquí o %{browseFiles}',
-                      dropPasteFiles: '📁 Suelta el video aquí o %{browseFiles}',
+                      dropPasteBoth: 'Suelta tu video aquí o %{browseFiles}',
+                      dropPasteFiles: 'Suelta tu video aquí o %{browseFiles}',
                       browseFiles: 'haz click para seleccionar',
-                      dropHint: 'Arrastra tu archivo aquí',
+                      dropHint: 'Arrastra tu video aquí',
                     },
                   }}
                 />

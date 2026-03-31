@@ -36,6 +36,7 @@ export function useVideoUpload({
 
   const uppy = useMemo(() => {
     const instance = new Uppy<Meta, Body>({
+      id: 'videoUploader',
       restrictions: {
         maxNumberOfFiles: 1,
         allowedFileTypes: ['video/*'],
@@ -55,7 +56,7 @@ export function useVideoUpload({
     }
 
     return instance;
-  }, [isTusEnabled, tusEndpoint]);
+  }, []); // Solo crear una vez
 
   useEffect(() => {
     function handleFileAdded(file: UppyAnyFile): void {
@@ -123,10 +124,16 @@ export function useVideoUpload({
       uppy.off('upload-progress', handleUploadProgress);
       uppy.off('upload-success', handleUploadSuccess);
       uppy.off('error', handleError);
-      uppy.cancelAll();
-      uppy.destroy();
     };
   }, [isTusEnabled, onUploadIdReceived, onUploadStateChange, onVideoSelected, uppy]);
+
+  // Cleanup solo al desmontar
+  useEffect(() => {
+    return () => {
+      uppy.cancelAll();
+      uppy.close();
+    };
+  }, [uppy]);
 
   return {
     uppy,
