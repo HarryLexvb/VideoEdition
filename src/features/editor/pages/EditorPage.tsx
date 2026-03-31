@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import Dashboard from '@uppy/react/dashboard';
-import { AlertCircle, Download, FileVideo, Sparkles, Upload as UploadIcon } from 'lucide-react';
+import { AlertCircle, Download, FileVideo, MousePointerClick, Sparkles, Upload as UploadIcon } from 'lucide-react';
 
 import { StatusBadge } from '../../../shared/components/StatusBadge';
 import { createId } from '../../../shared/lib/id';
@@ -265,7 +265,7 @@ export function EditorPage() {
                 </button>
               </div>
 
-              {/* Instrucciones visuales claras */}
+              {/* Instrucciones visuales mejoradas */}
               <div className="border-b border-slate-200 bg-gradient-to-br from-brand-50/50 to-cyan-50/30 p-6 dark:border-slate-700 dark:from-brand-950/20 dark:to-cyan-950/10">
                 <div className="flex items-start gap-4">
                   <div className="rounded-xl bg-brand-100 p-3 dark:bg-brand-900/40">
@@ -273,10 +273,11 @@ export function EditorPage() {
                   </div>
                   <div className="flex-1">
                     <h3 className="font-display text-lg font-semibold text-slate-900 dark:text-slate-100">
-                      Arrastra tu video aquí
+                      Arrastra tu video aquí o haz click abajo
                     </h3>
-                    <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
-                      O haz click en el área de abajo para seleccionar un archivo de tu equipo
+                    <p className="mt-1 flex items-center gap-1.5 text-sm text-slate-600 dark:text-slate-400">
+                      <MousePointerClick className="h-4 w-4" aria-hidden="true" />
+                      <span>Puedes hacer <strong>click en el área de abajo</strong> o arrastrar un archivo</span>
                     </p>
                     <div className="mt-3 flex flex-wrap gap-2">
                       <span className="rounded-lg bg-white px-2.5 py-1 text-xs font-medium text-slate-700 ring-1 ring-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:ring-slate-700">
@@ -291,19 +292,22 @@ export function EditorPage() {
                 </div>
               </div>
 
-              {/* Dashboard de Uppy */}
+              {/* Dashboard de Uppy con configuración mejorada */}
               <div className="p-5">
                 <Dashboard
                   uppy={uppy}
+                  inline
                   proudlyDisplayPoweredByUppy={false}
                   hideUploadButton={!isTusEnabled}
-                  height={280}
-                  note="Formatos de video soportados: MP4, WebM, MOV, AVI"
+                  height={320}
+                  width="100%"
+                  note="💡 Haz click en el área o arrastra tu archivo aquí"
                   locale={{
                     strings: {
-                      dropPasteBoth: 'Suelta el video aquí o %{browseFiles}',
-                      dropPasteFiles: 'Suelta el video aquí o %{browseFiles}',
-                      browseFiles: 'selecciona un archivo',
+                      dropPasteBoth: '📁 Suelta el video aquí o %{browseFiles}',
+                      dropPasteFiles: '📁 Suelta el video aquí o %{browseFiles}',
+                      browseFiles: 'haz click para seleccionar',
+                      dropHint: 'Arrastra tu archivo aquí',
                     },
                   }}
                 />
@@ -384,7 +388,7 @@ export function EditorPage() {
 
         <footer className="mt-6 rounded-2xl border border-white/60 bg-white/70 p-4 text-xs text-slate-500 dark:border-slate-700/50 dark:bg-slate-800/70 dark:text-slate-400">
           <p>
-            Pipeline frontend no destructivo: visualiza cortes, gestiona segmentos y envia operaciones para procesamiento en backend.
+            Editor de video no destructivo: visualiza cortes, gestiona segmentos y prepara operaciones para procesamiento futuro.
           </p>
           <p className="mt-1">
             Job activo: {activeJobContext ? `${activeJobContext.action} (${activeJobContext.jobId})` : 'ninguno'}
