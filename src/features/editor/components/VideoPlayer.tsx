@@ -24,15 +24,17 @@ export function VideoPlayer({
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const playerRef = useRef<Plyr | null>(null);
   const [isPlayerReady, setIsPlayerReady] = useState(false);
+  const currentVideoUrlRef = useRef<string | null>(null);
+  const metadataIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Inicializar Plyr solo una vez
+  // 1. Inicializar Plyr solo una vez al montar el componente
   useEffect(() => {
     const mediaElement = videoRef.current;
     if (!mediaElement || playerRef.current) {
       return;
     }
 
-    console.log('[VideoPlayer] Inicializando Plyr player por primera vez');
+    console.log('[VideoPlayer] Inicializando Plyr player');
 
     const player = new Plyr(mediaElement, {
       controls: ['play-large', 'play', 'progress', 'current-time', 'duration', 'mute', 'volume', 'settings', 'fullscreen'],
@@ -45,7 +47,7 @@ export function VideoPlayer({
 
     playerRef.current = player;
     setIsPlayerReady(true);
-    console.log('[VideoPlayer] Plyr inicializado');
+    console.log('[VideoPlayer] Plyr inicializado correctamente');
 
     return () => {
       console.log('[VideoPlayer] Destruyendo Plyr');
@@ -55,7 +57,7 @@ export function VideoPlayer({
     };
   }, []); // Solo se ejecuta una vez al montar
 
-  // Pasar mediaElement cuando el player está listo
+  // 2. Pasar mediaElement al padre cuando el player esté listo
   useEffect(() => {
     const mediaElement = videoRef.current;
     if (!mediaElement || !isPlayerReady) {
@@ -66,11 +68,12 @@ export function VideoPlayer({
     onMediaReady(mediaElement);
 
     return () => {
+      console.log('[VideoPlayer] Limpiando mediaElement del padre');
       onMediaReady(null);
     };
   }, [isPlayerReady, onMediaReady]);
 
-  // Event listeners para el video
+  // 3. Event listeners del video - configurar una sola vez
   useEffect(() => {
     const mediaElement = videoRef.current;
     if (!mediaElement) {
@@ -78,38 +81,55 @@ export function VideoPlayer({
     }
 
     function handleTimeUpdate(): void {
-      if (!videoRef.current) {
-        return;
+      if (videoRef.current) {
+        onTimeUpdate(videoRef.current.currentTime);
       }
-      onTimeUpdate(videoRef.current.currentTime);
     }
 
     function handleLoadedMetadata(): void {
-      if (!videoRef.current) {
-        return;
-      }
+      if (!videoRef.current) return;
 
-      const duration = videoRef.current.duration || 0;
-      console.log('[VideoPlayer] ✓ loadedmetadata - Duración:', duration, 'segundos');
-      onDurationChange(duration);
+      const duration = videoRef.current.duration;
+      if (duration && isFinite(duration)) {
+        console.log('[VideoPlayer] ✓ loadedmetadata - Duración:', duration, 'segundos');
+        onDurationChange(duration);
+        
+        // Limpiar polling si existe
+        if (metadataIntervalRef.current) {
+          clearInterval(metadataIntervalRef.current);
+          metadataIntervalRef.current = null;
+        }
+      }
     }
 
     function handleDurationChange(): void {
-      if (!videoRef.current) {
-        return;
-      }
+      if (!videoRef.current) return;
 
-      const duration = videoRef.current.duration || 0;
-      console.log('[VideoPlayer] ✓ durationchange - Duración:', duration, 'segundos');
-      onDurationChange(duration);
+      const duration = videoRef.current.duration;
+      if (duration && isFinite(duration)) {
+        console.log('[VideoPlayer] ✓ durationchange - Duración:', duration, 'segundos');
+        onDurationChange(duration);
+      }
     }
 
     function handleLoadedData(): void {
-      console.log('[VideoPlayer] ✓ loadeddata - Video data cargada');
+      console.log('[VideoPlayer] ✓ loadeddata - Datos del video cargados');
     }
 
     function handleCanPlay(): void {
       console.log('[VideoPlayer] ✓ canplay - Video listo para reproducir');
+    }
+
+    function handleError(event: Event): void {
+      const target = event.target as HTMLVideoElement;
+      const error = target.error;
+      
+      if (error) {
+        console.error('[VideoPlayer] ❌ Error cargando video:', {
+          code: error.code,
+          message: error.message,
+        });
+      }
     }
 
     mediaElement.addEventListener('timeupdate', handleTimeUpdate);
@@ -117,6 +137,7 @@ export function VideoPlayer({
     mediaElement.addEventListener('durationchange', handleDurationChange);
     mediaElement.addEventListener('loadeddata', handleLoadedData);
     mediaElement.addEventListener('canplay', handleCanPlay);
+    mediaElement.addEventListener('error', handleError);
 
     return () => {
       mediaElement.removeEventListener('timeupdate', handleTimeUpdate);
@@ -124,61 +145,127 @@ export function VideoPlayer({
       mediaElement.removeEventListener('durationchange', handleDurationChange);
       mediaElement.removeEventListener('loadeddata', handleLoadedData);
       mediaElement.removeEventListener('canplay', handleCanPlay);
+      mediaElement.removeEventListener('error', handleError);
     };
-  }, [onDurationChange, onTimeUpdate]);
+  }, []); // Listeners estables, sin dependencias de callbacks
 
-  // Cargar el video cuando cambia
+  // 4. Cargar el video cuando cambia - ESTE ES EL EFECTO CRÍTICO
   useEffect(() => {
     const mediaElement = videoRef.current;
     if (!mediaElement) {
       return;
     }
 
+    // Limpiar polling anterior si existe
+    if (metadataIntervalRef.current) {
+      clearInterval(metadataIntervalRef.current);
+      metadataIntervalRef.current = null;
+    }
+
+    // Si no hay video, limpiar
     if (!video) {
       console.log('[VideoPlayer] Limpiando video anterior');
       mediaElement.removeAttribute('src');
       mediaElement.load();
+      currentVideoUrlRef.current = null;
       return;
     }
 
-    console.log('[VideoPlayer] 🎬 Cargando video:', video.fileName);
+    // Si el video no ha cambiado, no hacer nada
+    if (currentVideoUrlRef.current === video.localUrl) {
+      console.log('[VideoPlayer] Video ya cargado, omitiendo recarga');
+      return;
+    }
+
+    console.log('[VideoPlayer] 🎬 Cargando nuevo video:', video.fileName);
     console.log('[VideoPlayer] URL:', video.localUrl);
     
+    // Asignar nuevo src y cargar
+    currentVideoUrlRef.current = video.localUrl;
     mediaElement.src = video.localUrl;
     mediaElement.load();
 
-    // Polling para forzar detección de metadatos
-    const checkMetadata = setInterval(() => {
-      if (mediaElement.readyState >= 1) {
-        const readyStateNames = ['HAVE_NOTHING', 'HAVE_METADATA', 'HAVE_CURRENT_DATA', 'HAVE_FUTURE_DATA', 'HAVE_ENOUGH_DATA'];
-        console.log(`[VideoPlayer] ReadyState: ${mediaElement.readyState} (${readyStateNames[mediaElement.readyState]})`);
+    // Polling como fallback para detectar metadatos
+    const checkMetadata = () => {
+      if (!mediaElement || !videoRef.current) {
+        if (metadataIntervalRef.current) {
+          clearInterval(metadataIntervalRef.current);
+          metadataIntervalRef.current = null;
+        }
+        return;
+      }
+
+      const readyState = mediaElement.readyState;
+      const duration = mediaElement.duration;
+
+      if (readyState >= 1) {
+        const stateNames = [
+          'HAVE_NOTHING',
+          'HAVE_METADATA',
+          'HAVE_CURRENT_DATA',
+          'HAVE_FUTURE_DATA',
+          'HAVE_ENOUGH_DATA',
+        ];
         
-        if (mediaElement.duration && isFinite(mediaElement.duration)) {
-          console.log('[VideoPlayer] ✓ Duración forzada:', mediaElement.duration, 'segundos');
-          onDurationChange(mediaElement.duration);
-          clearInterval(checkMetadata);
+        console.log(`[VideoPlayer] ReadyState: ${readyState} (${stateNames[readyState] || 'UNKNOWN'})`);
+        
+        if (duration && isFinite(duration)) {
+          console.log('[VideoPlayer] ✓ Duración detectada via polling:', duration, 'segundos');
+          onDurationChange(duration);
+          
+          // Limpiar interval
+          if (metadataIntervalRef.current) {
+            clearInterval(metadataIntervalRef.current);
+            metadataIntervalRef.current = null;
+          }
         }
       }
-    }, 100);
+    };
 
-    setTimeout(() => {
-      clearInterval(checkMetadata);
-      console.log('[VideoPlayer] Timeout de polling alcanzado');
-    }, 5000);
+    // Iniciar polling cada 100ms
+    metadataIntervalRef.current = setInterval(checkMetadata, 100);
 
-  }, [video, onDurationChange]);
+    // Timeout de seguridad: detener polling después de 8 segundos
+    const timeoutId = setTimeout(() => {
+      if (metadataIntervalRef.current) {
+        console.log('[VideoPlayer] Timeout de polling alcanzado (8s)');
+        clearInterval(metadataIntervalRef.current);
+        metadataIntervalRef.current = null;
+      }
+    }, 8000);
 
-  // Sincronizar tiempo cuando se solicita seek
+    return () => {
+      clearTimeout(timeoutId);
+      if (metadataIntervalRef.current) {
+        clearInterval(metadataIntervalRef.current);
+        metadataIntervalRef.current = null;
+      }
+    };
+  }, [video]); // Solo depende de video, no de callbacks
+
+  // 5. Sincronizar tiempo cuando se solicita seek externo
   useEffect(() => {
     const mediaElement = videoRef.current;
     if (!mediaElement || !video || !Number.isFinite(requestedTime)) {
       return;
     }
 
-    if (Math.abs(mediaElement.currentTime - requestedTime) > 0.18) {
+    // Solo actualizar si la diferencia es significativa (> 0.18s)
+    const currentTime = mediaElement.currentTime;
+    if (Math.abs(currentTime - requestedTime) > 0.18) {
       mediaElement.currentTime = requestedTime;
     }
   }, [requestedTime, video]);
+
+  // 6. Cleanup general al desmontar
+  useEffect(() => {
+    return () => {
+      if (metadataIntervalRef.current) {
+        clearInterval(metadataIntervalRef.current);
+        metadataIntervalRef.current = null;
+      }
+    };
+  }, []);
 
   return (
     <section className="group rounded-3xl border border-white/40 bg-gradient-to-br from-slate-900 via-slate-950 to-slate-900 p-5 shadow-[0_24px_55px_-30px_rgba(2,6,23,0.9)] transition-all hover:shadow-[0_24px_65px_-25px_rgba(2,6,23,0.95)] dark:border-slate-800/60 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950">
@@ -218,3 +305,4 @@ export function VideoPlayer({
     </section>
   );
 }
+

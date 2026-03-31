@@ -20,10 +20,19 @@ export default {
           700: '#115e59',
           800: '#134e4a',
           900: '#042f2e',
+          950: '#042f2e',
         },
+      },
+      keyframes: {
+        shimmer: {
+          '0%': { transform: 'translateX(-100%)' },
+          '100%': { transform: 'translateX(100%)' },
+        },
+      },
+      animation: {
+        shimmer: 'shimmer 2s infinite',
       },
     },
   },
   plugins: [],
 }
-

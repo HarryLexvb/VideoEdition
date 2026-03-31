@@ -1,4 +1,4 @@
-import { AudioLines, Clapperboard, Download, Loader2, RotateCcw, Upload } from 'lucide-react';
+import { AudioLines, Clapperboard, Download, Loader2, RotateCcw, Upload, Video } from 'lucide-react';
 
 import { Button } from '../../../shared/components/Button';
 import { StatusBadge } from '../../../shared/components/StatusBadge';
@@ -86,10 +86,28 @@ export function HeaderBar({
 
         <div className="flex flex-wrap items-center gap-2">
           <ThemeToggle />
-          <Button variant="secondary" onClick={onOpenUploader}>
-            <Upload className="h-4 w-4" aria-hidden="true" />
-            Cargar video
-          </Button>
+          
+          {/* Botón Cargar Video mejorado - versión principal */}
+          <button
+            onClick={onOpenUploader}
+            className="group relative overflow-hidden rounded-xl bg-gradient-to-r from-brand-500 via-brand-600 to-cyan-600 px-6 py-3 font-semibold text-white shadow-lg shadow-brand-500/30 transition-all duration-300 hover:scale-105 hover:shadow-xl hover:shadow-brand-500/40 active:scale-95 dark:from-brand-600 dark:via-brand-700 dark:to-cyan-700"
+          >
+            {/* Efecto de brillo animado */}
+            <div className="absolute inset-0 -translate-x-full animate-[shimmer_2s_infinite] bg-gradient-to-r from-transparent via-white/20 to-transparent" />
+            
+            {/* Contenido del botón */}
+            <div className="relative flex items-center gap-2.5">
+              <div className="rounded-lg bg-white/20 p-1.5 backdrop-blur-sm">
+                <Video className="h-4 w-4" aria-hidden="true" />
+              </div>
+              <span className="text-sm font-bold tracking-wide">Cargar Video</span>
+              <Upload className="h-4 w-4 transition-transform duration-300 group-hover:-translate-y-0.5" aria-hidden="true" />
+            </div>
+
+            {/* Borde animado */}
+            <div className="absolute inset-0 rounded-xl bg-gradient-to-r from-brand-400 via-cyan-400 to-brand-400 opacity-0 blur-lg transition-opacity duration-300 group-hover:opacity-50" />
+          </button>
+
           <Button onClick={onExport} loading={exporting} disabled={!video || extractingAudio}>
             <Download className="h-4 w-4" aria-hidden="true" />
             Exportar

@@ -42,14 +42,25 @@ export function TimelinePanel({
   const containerRef = useRef<HTMLDivElement | null>(null);
   const waveSurferRef = useRef<WaveSurfer | null>(null);
   const regionsPluginRef = useRef<ReturnType<typeof RegionsPlugin.create> | null>(null);
+  const onSeekRef = useRef(onSeek);
+  const onSelectSegmentRef = useRef(onSelectSegment);
+
+  // Mantener refs actualizadas sin trigger re-render
+  useEffect(() => {
+    onSeekRef.current = onSeek;
+  }, [onSeek]);
+
+  useEffect(() => {
+    onSelectSegmentRef.current = onSelectSegment;
+  }, [onSelectSegment]);
 
   const keepCount = useMemo(() => segments.filter((segment) => segment.disposition === 'keep').length, [segments]);
   const removeCount = useMemo(() => segments.filter((segment) => segment.disposition === 'remove').length, [segments]);
 
+  // Inicializar WaveSurfer solo cuando mediaElement esté disponible
   useEffect(() => {
     if (!containerRef.current || !mediaElement) {
       console.log('[TimelinePanel] Esperando containerRef y mediaElement');
-      console.log('[TimelinePanel] containerRef:', !!containerRef.current, 'mediaElement:', !!mediaElement);
       return;
     }
 
@@ -80,33 +91,42 @@ export function TimelinePanel({
 
     console.log('[TimelinePanel] ✓ WaveSurfer creado exitosamente');
 
-    waveSurfer.on('interaction', (newTime: number) => {
-      onSeek(newTime);
-    });
+    // Event handlers estables usando refs
+    const handleInteraction = (newTime: number) => {
+      onSeekRef.current(newTime);
+    };
 
-    regionsPlugin.on('region-clicked', (region: { id: string; start: number }, event: MouseEvent) => {
+    const handleRegionClicked = (region: { id: string; start: number }, event: MouseEvent) => {
       event.stopPropagation();
-      onSelectSegment(region.id);
-      onSeek(region.start);
-    });
+      onSelectSegmentRef.current(region.id);
+      onSeekRef.current(region.start);
+    };
+
+    waveSurfer.on('interaction', handleInteraction);
+    regionsPlugin.on('region-clicked', handleRegionClicked);
 
     return () => {
+      console.log('[TimelinePanel] Destruyendo WaveSurfer');
       waveSurfer.destroy();
       waveSurferRef.current = null;
       regionsPluginRef.current = null;
     };
-  }, [mediaElement, onSeek, onSelectSegment]);
+  }, [mediaElement]); // Solo recrear cuando mediaElement cambie
 
+  // Actualizar regions cuando cambien segments o selectedSegmentId
   useEffect(() => {
     const regionsPlugin = regionsPluginRef.current;
     if (!regionsPlugin) {
       return;
     }
 
-    for (const region of regionsPlugin.getRegions()) {
+    // Limpiar regions existentes
+    const existingRegions = regionsPlugin.getRegions();
+    for (const region of existingRegions) {
       region.remove();
     }
 
+    // Agregar nuevas regions
     for (const segment of segments) {
       regionsPlugin.addRegion({
         id: segment.id,
@@ -119,13 +139,16 @@ export function TimelinePanel({
     }
   }, [segments, selectedSegmentId]);
 
+  // Sincronizar playhead time con WaveSurfer
   useEffect(() => {
     const waveSurfer = waveSurferRef.current;
     if (!waveSurfer || duration <= 0) {
       return;
     }
 
-    if (Math.abs(waveSurfer.getCurrentTime() - playheadTime) > 0.18) {
+    const currentTime = waveSurfer.getCurrentTime();
+    // Solo actualizar si la diferencia es significativa
+    if (Math.abs(currentTime - playheadTime) > 0.18) {
       waveSurfer.setTime(playheadTime);
     }
   }, [duration, playheadTime]);

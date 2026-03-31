@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import Dashboard from '@uppy/react/dashboard';
 import { AlertCircle, Download, FileVideo, Sparkles, Upload as UploadIcon } from 'lucide-react';
@@ -20,7 +20,7 @@ interface ActiveJobContext {
 }
 
 export function EditorPage() {
-  const [mediaElement, setMediaElement] = useState<HTMLVideoElement | null>(null);
+  const [mediaElement, setMediaElementState] = useState<HTMLVideoElement | null>(null);
   const [activeJobContext, setActiveJobContext] = useState<ActiveJobContext | null>(null);
   const [uiMessage, setUiMessage] = useState<string | null>(null);
   const [uiError, setUiError] = useState<string | null>(null);
@@ -60,10 +60,34 @@ export function EditorPage() {
   const extractAudioMutation = useStartExtractAudioJob();
   const jobStatusQuery = useProcessingJob(activeJobContext?.jobId ?? null);
 
+  // Estabilizar callback de setMediaElement para evitar re-renders en VideoPlayer
+  const setMediaElement = useCallback((element: HTMLVideoElement | null) => {
+    setMediaElementState(element);
+  }, []);
+
+  // Estabilizar callback de onTimeUpdate
+  const handleTimeUpdate = useCallback((time: number) => {
+    setPlayheadTime(time);
+  }, [setPlayheadTime]);
+
+  // Estabilizar callback de onDurationChange
+  const handleDurationChange = useCallback((duration: number) => {
+    setVideoDuration(duration);
+  }, [setVideoDuration]);
+
   const { uppy, isDashboardOpen, setDashboardOpen, isTusEnabled, uploadProgress, uploadError } = useVideoUpload({
     onVideoSelected: (file: File) => {
+      // Validar tamaño del archivo antes de procesar
+      const MAX_SIZE = 2 * 1024 * 1024 * 1024; // 2GB
+      if (file.size > MAX_SIZE) {
+        setUiError('El video excede el tamaño máximo permitido (2GB)');
+        return;
+      }
+
+      // Revocar URL anterior si existe
       if (previousObjectUrlRef.current) {
         URL.revokeObjectURL(previousObjectUrlRef.current);
+        previousObjectUrlRef.current = null;
       }
 
       const objectUrl = URL.createObjectURL(file);
@@ -83,7 +107,7 @@ export function EditorPage() {
       setUiError(null);
       setUiMessage('Video cargado correctamente. Espera a que se genere la linea de tiempo.');
       
-      setTimeout(() => setDashboardOpen(false), 200);
+      setTimeout(() => setDashboardOpen(false), 300);
     },
     onUploadIdReceived: setVideoUploadId,
     onUploadStateChange: setUploadState,
@@ -94,14 +118,17 @@ export function EditorPage() {
     console.log('[EditorPage] Video en store:', video ? `${video.fileName} (${video.duration}s)` : 'null');
   }, [mediaElement, video]);
 
+  // Cleanup de object URL al desmontar
   useEffect(() => {
     return () => {
       if (previousObjectUrlRef.current) {
         URL.revokeObjectURL(previousObjectUrlRef.current);
+        previousObjectUrlRef.current = null;
       }
     };
   }, []);
 
+  // Keyboard shortcuts para undo/redo
   useEffect(() => {
     function handleKeyboardShortcuts(event: KeyboardEvent): void {
       const isMetaOrControl = event.metaKey || event.ctrlKey;
@@ -124,6 +151,7 @@ export function EditorPage() {
     };
   }, [redo, undo]);
 
+  // Job status polling
   useEffect(() => {
     const jobStatus = jobStatusQuery.data;
     if (!jobStatus) {
@@ -322,8 +350,8 @@ export function EditorPage() {
               video={video}
               requestedTime={playheadTime}
               onMediaReady={setMediaElement}
-              onTimeUpdate={setPlayheadTime}
-              onDurationChange={setVideoDuration}
+              onTimeUpdate={handleTimeUpdate}
+              onDurationChange={handleDurationChange}
             />
 
             <TimelinePanel
