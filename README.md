@@ -1,52 +1,50 @@
 # VideoCut Studio
 
-> Editor de video no destructivo con interfaz profesional para cargar, visualizar y editar videos locales mediante timeline interactivo con waveform.
+> Editor de video no destructivo con interfaz profesional para cargar, visualizar y editar videos localmente mediante timeline interactivo.
 
 ## 🎯 Estado Actual
 
-**Frontend funcional al 100% - Backend no implementado**
+**✅ Frontend 100% Funcional | ❌ Backend No Implementado**
 
-### ✅ Funcionalidades Implementadas
+### ✨ Funcionalidades Implementadas
 
-- ✨ Carga local de videos (hasta 2GB)
-- 🎬 Preview con controles profesionales (Plyr)
-- 🎵 Timeline interactivo con visualización de waveform (WaveSurfer.js)
-- ✂️ Sistema de segmentos con marcado keep/remove
-- ↩️ Undo/Redo completo (Ctrl+Z / Ctrl+Shift+Z)
-- 🌓 Dark mode
-- 📦 Gestión de estado con Zustand
-- 🎨 UI responsive con Tailwind CSS
-- 🚀 Drag and drop y click para cargar archivos
+- ✅ **Carga de videos** (hasta 2GB) - Drag & drop o click
+- ✅ **Preview profesional** con controles Plyr
+- ✅ **Timeline interactivo** con waveform (WaveSurfer.js)
+- ✅ **Sistema de segmentos** con marcado keep/remove
+- ✅ **Undo/Redo completo** (Ctrl+Z / Ctrl+Shift+Z)
+- ✅ **Dark mode** con persistencia
+- ✅ **Gestión de estado** con Zustand
+- ✅ **UI responsive** con Tailwind CSS
 
-### 🚧 Limitaciones Actuales
+### ⚠️ Limitaciones Actuales
 
-**No implementado (futuro roadmap):**
-- Export real de video
-- Extracción de audio
-- Procesamiento con FFmpeg
-- Backend/API
-- Storage persistente
-- Sistema de jobs
+**NO funciona sin backend:**
+- ❌ Export real de video editado
+- ❌ Extracción de audio
+- ❌ Procesamiento con FFmpeg
+- ❌ API/Backend
+- ❌ Storage persistente
+- ❌ Sistema de jobs
 
 ## 🛠️ Stack Tecnológico
 
 | Categoría | Tecnologías |
 |-----------|-------------|
-| **Core** | React 19, TypeScript 5.9, Vite 8 |
+| **Core** | React 19.2, TypeScript 5.9, Vite 8 |
 | **Estado** | Zustand 5, TanStack Query 5 |
-| **UI** | Tailwind CSS 3, Lucide React |
+| **UI** | Tailwind CSS 3, Lucide React 1 |
 | **Media** | Plyr 3.8 (player), WaveSurfer.js 7 (timeline) |
 | **Upload** | Uppy 5 (con soporte Tus opcional) |
 | **Routing** | React Router DOM 6 |
 
-## 📋 Requisitos Previos
+## 📋 Requisitos
 
-- **Node.js** 18+ (recomendado v23+)
-- **npm** 9+
+- **Node.js** 18+ (probado con v23.2.0)
+- **npm** 9+ (probado con 10.9.0)
 - **Navegador moderno** con soporte para:
-  - ES2020+
-  - Web APIs: File, Blob, URL.createObjectURL
-  - Codec: H.264/AAC (para mejor compatibilidad)
+  - ES2020+, File API, Blob, URL.createObjectURL
+  - Codec H.264/AAC recomendado
 
 ## 🚀 Instalación
 
@@ -58,49 +56,48 @@ cd VideoEdition
 # Instalar dependencias
 npm install
 
-# Iniciar servidor de desarrollo
+# Iniciar desarrollo
 npm run dev
 ```
 
-El proyecto estará disponible en `http://localhost:5173`
+Accede en: `http://localhost:5173`
 
-## 📖 Cómo Usar
+## 📖 Guía de Uso
 
-### 1. Cargar Video
+### 1️⃣ Cargar Video
 
-1. Click en botón **"Cargar Video"** (botón con gradiente azul/verde en la esquina superior derecha)
-2. En el modal que aparece, puedes:
-   - **Arrastrar** un archivo de video al área designada
-   - **Hacer click** en el área de carga para abrir el explorador de archivos
-3. Formatos recomendados: MP4 (H.264/AAC), WebM, MOV
-4. Tamaño máximo: 2GB
+1. Click en **"Cargar Video"** (botón con gradiente en la esquina superior derecha)
+2. En el modal:
+   - **Arrastra** un video al área gris
+   - **O haz click** en el área gris para abrir el selector de archivos
+3. **Formatos:** MP4 (H.264/AAC), WebM, MOV
+4. **Máximo:** 2GB
 
-### 2. Visualizar Video
+### 2️⃣ Visualizar
 
-Una vez cargado:
-- El **preview** se mostrará arriba con controles de reproducción
-- El **timeline con waveform** aparecerá debajo automáticamente
-- Espera unos segundos mientras se cargan los metadatos del video
+- El **preview** aparece arriba con controles de reproducción
+- El **timeline con waveform** se genera automáticamente debajo
+- Espera unos segundos mientras carga los metadatos
 
-### 3. Editar en Timeline
+### 3️⃣ Editar
 
-- Click en **"Cortar en cabezal"** para dividir el video en el punto actual
-- Los segmentos se crean automáticamente
-- Puedes hacer click en el timeline para mover el cabezal (playhead)
+- **Cortar:** Click en "Cortar en cabezal" para dividir en el punto actual
+- **Navegar:** Click en el timeline para mover el playhead
+- **Reproducir:** Usa los controles del player
 
-### 4. Gestión de Segmentos
+### 4️⃣ Gestionar Segmentos
 
 **Panel lateral derecho:**
-- Lista de todos los segmentos
-- Click en un segmento para seleccionarlo
-- Marca segmentos como:
-  - **Verde (keep)**: Conservar en el video final
-  - **Rojo (remove)**: Eliminar del video final
-- **Undo/Redo**: Ctrl+Z / Ctrl+Shift+Z
+- Ver lista de segmentos creados
+- Click en segmento para seleccionar
+- Marcar como:
+  - 🟢 **Keep** (verde) - Conservar
+  - 🔴 **Remove** (rojo) - Eliminar
+- **Undo/Redo:** Ctrl+Z / Ctrl+Shift+Z
 
-### 5. Funciones de Exportación (Sin Backend)
+### 5️⃣ Exportar (⚠️ No Funcional)
 
-**Importante:** Los botones "Exportar" y "Extraer audio" están visibles pero **no funcionan** sin un backend configurado. Solo se prepara la configuración de segmentos.
+Los botones "Exportar" y "Extraer audio" preparan la configuración pero **NO procesan el video** porque no hay backend implementado.
 
 ## 🏗️ Estructura del Proyecto
 
@@ -108,23 +105,23 @@ Una vez cargado:
 VideoEdition/
 ├── src/
 │   ├── features/
-│   │   └── editor/              # Feature principal de edición
-│   │       ├── api/             # Hooks de API (preparados para backend)
-│   │       ├── components/      # Componentes del editor
-│   │       │   ├── VideoPlayer.tsx      # Reproductor con Plyr
-│   │       │   ├── TimelinePanel.tsx    # Timeline con WaveSurfer
-│   │       │   ├── SidebarPanel.tsx     # Panel de segmentos
-│   │       │   └── HeaderBar.tsx        # Barra superior
-│   │       ├── hooks/           # Hooks personalizados
-│   │       ├── model/           # Types y lógica de negocio
-│   │       ├── pages/           # EditorPage principal
-│   │       └── store/           # Zustand store
-│   ├── shared/                  # Componentes y utilidades compartidas
-│   │   ├── components/          # Button, StatusBadge, ThemeToggle
-│   │   ├── contexts/            # ThemeContext
-│   │   └── lib/                 # Utilidades (formatTime, id)
-│   ├── router/                  # Configuración de rutas
-│   └── styles/                  # Global CSS
+│   │   └── editor/
+│   │       ├── api/              # Hooks API (preparados para backend)
+│   │       ├── components/        # Componentes del editor
+│   │       │   ├── VideoPlayer.tsx
+│   │       │   ├── TimelinePanel.tsx
+│   │       │   ├── SidebarPanel.tsx
+│   │       │   └── HeaderBar.tsx
+│   │       ├── hooks/            # useVideoUpload
+│   │       ├── model/            # Types y lógica de negocio
+│   │       ├── pages/            # EditorPage
+│   │       └── store/            # Zustand store
+│   ├── shared/
+│   │   ├── components/           # Button, StatusBadge, ThemeToggle
+│   │   ├── contexts/             # ThemeContext
+│   │   └── lib/                  # Utilidades (formatTime, id)
+│   ├── router/                   # AppRouter
+│   └── styles/                   # global.css
 ├── public/
 └── index.html
 ```
@@ -133,106 +130,124 @@ VideoEdition/
 
 ### El video no carga
 
-**Síntomas:**
-- Al seleccionar un video, no aparece en el preview
-- El timeline no se genera
+**Síntomas:** No aparece preview ni timeline
 
 **Soluciones:**
-1. **Verifica el formato**: Preferir MP4 H.264/AAC
-2. **Abre DevTools** (F12) y revisa la consola
-3. Busca mensajes con `[VideoPlayer]` o `[TimelinePanel]`
+1. Usa MP4 H.264/AAC (mayor compatibilidad)
+2. Abre DevTools (F12) → Console
+3. Busca logs con `[VideoPlayer]` o `[TimelinePanel]`
 
-**Logs esperados (exitosos):**
+**Logs esperados (éxito):**
 ```
 [EditorPage] Video seleccionado: video.mp4 URL creada: blob:...
 [VideoPlayer] 🎬 Cargando video: video.mp4
 [VideoPlayer] ✓ loadedmetadata - Duración: 120.5 segundos
-[VideoPlayer] MediaElement listo, pasando a TimelinePanel
 [TimelinePanel] ✓ Inicializando WaveSurfer
 [TimelinePanel] ✓ WaveSurfer creado exitosamente
 ```
 
-### El area de carga no responde al click
+### El área de carga no funciona
 
 **Solución:**
-- El área **SÍ** acepta clicks
-- Asegúrate de hacer click **dentro del área de carga** (cuadro gris/azul en el centro del modal)
-- El texto "haz click para seleccionar" es clickeable
+- El área **gris/azul** en el centro del modal ES clickeable
+- Haz click directamente en el área de drop zone
+- O arrastra el archivo sobre ella
 
 ### Timeline no aparece
 
-**Causas comunes:**
-- Metadatos del video no cargaron correctamente
-- Formato de video incompatible
+**Causas:**
+- Video aún cargando metadatos (espera unos segundos)
+- Formato incompatible
 - Video corrupto
 
-**Solución:**
-1. Espera unos segundos (videos grandes tardan más)
-2. Intenta con un video diferente más pequeño
-3. Verifica que el footer muestre "Media: conectado"
+**Verifica:**
+- Footer muestra "Media: conectado"
+- Console muestra logs de WaveSurfer
+- Prueba con otro video más pequeño
 
-### Formatos no soportados
+### Formatos Soportados
 
-**✅ Recomendados (mayor compatibilidad):**
-- MP4 (H.264 video + AAC audio)
+**✅ Recomendados:**
+- MP4 (H.264 + AAC)
 - WebM (VP8/VP9 + Vorbis/Opus)
 
 **⚠️ Pueden fallar:**
-- AVI (dependiente del codec interno)
+- AVI (depende del codec)
 - MKV (no nativo en navegador)
 - Videos 4K+ (carga muy lenta)
-- Códecs exóticos (ProRes, etc.)
+- Códecs exóticos
 
-## 📦 Scripts Disponibles
+## 📦 Scripts
 
 ```bash
-npm run dev         # Servidor desarrollo con hot reload (puerto 5173)
-npm run build       # Build optimizado para producción
-npm run preview     # Preview del build de producción
-npm run typecheck   # Verificar tipos TypeScript
+npm run dev         # Desarrollo (puerto 5173)
+npm run build       # Producción
+npm run preview     # Preview del build
+npm run typecheck   # Verificar tipos TS
 ```
 
-## ⚙️ Variables de Entorno (Opcional)
+## ⚙️ Variables de Entorno
 
 ```bash
-# .env (copiar desde .env.example)
+# .env (opcional)
 VITE_TUS_ENDPOINT=http://localhost:3000/upload/tus
 ```
 
-**Nota:** Por defecto, la app funciona en modo **solo frontend**. Si defines `VITE_TUS_ENDPOINT`, habilitarás upload reanudable vía Tus (requiere backend).
+Si defines esto, habilita upload reanudable vía Tus (requiere backend).
 
-## 🎨 Características de UI
+## 🎨 Características UI
 
-- **Diseño moderno**: Gradientes, sombras suaves, bordes redondeados
-- **Animaciones**: Efectos shimmer, transiciones suaves
-- **Responsive**: Adaptado a desktop y tablets
-- **Dark mode**: Soporte completo para tema oscuro
-- **Accesibilidad**: ARIA labels, keyboard shortcuts
+- Gradientes modernos y sombras suaves
+- Animación shimmer en botón principal
+- Transiciones fluidas (300ms)
+- Dark mode completo
+- Responsive (desktop y tablets)
+- ARIA labels para accesibilidad
 
-## 🔧 Problemas Conocidos
+## ⚠️ IMPORTANTE - Leer Antes de Usar
 
-1. **Videos muy grandes (>1GB)** pueden tardar en cargar metadatos
-2. **Algunos formatos MOV** pueden no ser compatibles dependiendo del codec
-3. **Safari** puede tener problemas con ciertos códecs WebM
+### Este es un Editor Frontend Únicamente
+
+**Lo que SÍ hace:**
+- ✅ Cargar y reproducir videos localmente
+- ✅ Visualizar waveform
+- ✅ Crear y marcar segmentos
+- ✅ Gestionar historial de cambios
+
+**Lo que NO hace:**
+- ❌ NO exporta video procesado
+- ❌ NO extrae audio real
+- ❌ NO guarda proyectos
+- ❌ NO procesa video con FFmpeg
+
+Los botones de exportar/extraer audio están visibles pero **no funcionan** sin implementar backend.
 
 ## 🚀 Roadmap Futuro
 
-**Fase 1 - Backend (No implementado):**
-- [ ] API REST con Express/Fastify
-- [ ] Sistema de jobs con BullMQ
-- [ ] Procesamiento real con FFmpeg
-- [ ] Storage en S3/R2
+**Fase 1 - Backend:**
+- [ ] API REST (Express/Fastify)
+- [ ] Jobs (BullMQ)
+- [ ] Procesamiento (FFmpeg)
+- [ ] Storage (S3/R2)
 
-**Fase 2 - Funcionalidades (No implementado):**
-- [ ] Export funcional de video editado
-- [ ] Extracción real de audio
-- [ ] Múltiples pistas de video
-- [ ] Transiciones entre segmentos
+**Fase 2 - Funcionalidades:**
+- [ ] Export funcional
+- [ ] Extracción de audio real
+- [ ] Múltiples pistas
+- [ ] Transiciones
 - [ ] Efectos y filtros
+
+## 🤝 Contribuir
+
+1. Fork el proyecto
+2. Crea tu rama (`git checkout -b feature/nueva-funcionalidad`)
+3. Commit (`git commit -m 'feat: agregar funcionalidad'`)
+4. Push (`git push origin feature/nueva-funcionalidad`)
+5. Abre un Pull Request
 
 ## 📄 Licencia
 
-MIT License - ver archivo LICENSE para detalles
+MIT License
 
 ## 👤 Autor
 
@@ -242,38 +257,51 @@ MIT License - ver archivo LICENSE para detalles
 - Email: harrylex8@gmail.com
 - Email institucional: harold.villanueva@gmail.com
 
-## 🔗 Links
+## 🔗 Enlaces
 
 - **Repositorio:** https://github.com/HarryLexvb/VideoEdition
 - **Issues:** https://github.com/HarryLexvb/VideoEdition/issues
 
-## 🙏 Agradecimientos
+## 🙏 Tecnologías Utilizadas
 
-- **Uppy** - Sistema de upload modular
-- **Plyr** - Reproductor de video HTML5
-- **WaveSurfer.js** - Visualización de waveform
-- **Zustand** - Gestión de estado simple
-- **Lucide** - Íconos modernos
-
----
-
-**Versión:** 0.3.0  
-**Última actualización:** Marzo 2026  
-**Estado:** Frontend funcional, backend en roadmap
+- **Uppy** - Upload modular y robusto
+- **Plyr** - Reproductor HTML5 elegante
+- **WaveSurfer.js** - Visualización de audio/video
+- **Zustand** - Estado simple y potente
+- **Lucide** - Íconos SVG modernos
+- **Tailwind CSS** - Utility-first CSS
+- **Vite** - Build tool ultrarrápido
 
 ---
 
-## ⚠️ Nota Importante
+**Versión:** 0.4.0  
+**Última actualización:** 31 de Marzo, 2026  
+**Estado:** Frontend completo y funcional | Backend pendiente
 
-Este proyecto es un **editor frontend** únicamente. **No realiza procesamiento real de video**. Los botones de "Exportar" y "Extraer audio" preparan la configuración pero requieren implementar un backend con FFmpeg para funcionar.
+---
 
-La funcionalidad actual permite:
-- ✅ Cargar videos localmente
-- ✅ Visualizar y reproducir
-- ✅ Crear segmentos y marcarlos
-- ✅ Gestionar historial de cambios
-- ❌ NO exporta video procesado
-- ❌ NO extrae audio real
-- ❌ NO guarda proyectos
+## 📝 Notas de Desarrollo
 
-Para procesamiento real de video, es necesario implementar el backend según el roadmap.
+### Problemas Resueltos
+
+✅ Video flickering al cargar  
+✅ Timeline no renderiza  
+✅ Área de carga sin respuesta al click  
+✅ Callbacks inestables causando re-renders  
+✅ Object URLs sin cleanup  
+✅ Caracteres especiales mal codificados (UTF-8)
+
+### Cambios Recientes (v0.4.0)
+
+- Corregida codificación UTF-8 en textos
+- Optimizado flujo de carga de video
+- Mejorada UI del botón "Cargar Video"
+- Estabilizados callbacks con useCallback
+- Agregado soporte para click en área de drop
+- README actualizado con información verídica
+
+---
+
+**⚠️ RECORDATORIO FINAL**
+
+Este proyecto es un **editor de video no destructivo frontend**. La funcionalidad de procesamiento real (exportar, extraer audio) requiere implementar un backend con FFmpeg. El estado actual solo permite visualizar, segmentar y preparar la configuración de edición.

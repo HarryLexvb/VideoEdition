@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import Dashboard from '@uppy/react/dashboard';
 import { AlertCircle, Download, FileVideo, MousePointerClick, Sparkles, Upload as UploadIcon } from 'lucide-react';
@@ -77,10 +77,10 @@ export function EditorPage() {
 
   const { uppy, isDashboardOpen, setDashboardOpen, isTusEnabled, uploadProgress, uploadError } = useVideoUpload({
     onVideoSelected: (file: File) => {
-      // Validar tamaÃ±o del archivo antes de procesar
+      // Validar tamaño del archivo antes de procesar
       const MAX_SIZE = 2 * 1024 * 1024 * 1024; // 2GB
       if (file.size > MAX_SIZE) {
-        setUiError('El video excede el tamaÃ±o mÃ¡ximo permitido (2GB)');
+        setUiError('El video excede el tamaño máximo permitido (2GB)');
         return;
       }
 
@@ -273,15 +273,15 @@ export function EditorPage() {
                   </div>
                   <div className="flex-1">
                     <h3 className="font-display text-lg font-semibold text-slate-900 dark:text-slate-100">
-                      Arrastra tu video aquÃ­ o haz click abajo
+                      Arrastra tu video aquí o haz click abajo
                     </h3>
                     <p className="mt-1 flex items-center gap-1.5 text-sm text-slate-600 dark:text-slate-400">
                       <MousePointerClick className="h-4 w-4" aria-hidden="true" />
-                      <span>Haz <strong>click en el Ã¡rea gris de abajo</strong> o arrastra un archivo</span>
+                      <span>Haz <strong>click en el área gris de abajo</strong> o arrastra un archivo</span>
                     </p>
                     <div className="mt-3 flex flex-wrap gap-2">
                       <span className="rounded-lg bg-white px-2.5 py-1 text-xs font-medium text-slate-700 ring-1 ring-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:ring-slate-700">
-                        MÃ¡ximo 2 GB
+                        Máximo 2 GB
                       </span>
                       <span className="rounded-lg bg-white px-2.5 py-1 text-xs font-medium text-slate-700 ring-1 ring-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:ring-slate-700">
                         MP4, WebM, MOV
@@ -292,7 +292,7 @@ export function EditorPage() {
                 </div>
               </div>
 
-              {/* Dashboard de Uppy - ConfiguraciÃ³n correcta */}
+              {/* Dashboard de Uppy - Configuración correcta */}
               <div className="p-5">
                 <Dashboard
                   uppy={uppy}
@@ -300,13 +300,13 @@ export function EditorPage() {
                   hideProgressDetails={false}
                   hideUploadButton={!isTusEnabled}
                   height={350}
-                  note="ðŸ’¡ Haz click en esta Ã¡rea o arrastra tu video aquÃ­"
+                  note="💡 Haz click en esta área o arrastra tu video aquí"
                   locale={{
                     strings: {
-                      dropPasteBoth: 'Suelta tu video aquÃ­ o %{browseFiles}',
-                      dropPasteFiles: 'Suelta tu video aquÃ­ o %{browseFiles}',
+                      dropPasteBoth: 'Suelta tu video aquí o %{browseFiles}',
+                      dropPasteFiles: 'Suelta tu video aquí o %{browseFiles}',
                       browseFiles: 'haz click para seleccionar',
-                      dropHint: 'Arrastra tu video aquÃ­',
+                      dropHint: 'Arrastra tu video aquí',
                     },
                   }}
                 />
@@ -391,9 +391,9 @@ export function EditorPage() {
           </p>
           <p className="mt-1">
             Job activo: {activeJobContext ? `${activeJobContext.action} (${activeJobContext.jobId})` : 'ninguno'}
-            {' Â· '}
+            {' · '}
             Estado query: {jobStatusQuery.isFetching ? 'consultando' : 'estable'}
-            {' Â· '}
+            {' · '}
             Media: {mediaElement ? 'conectado' : 'desconectado'}
           </p>
           {!isTusEnabled ? <StatusBadge className="mt-2">Tus pendiente de configurar en entorno</StatusBadge> : null}
@@ -402,4 +402,3 @@ export function EditorPage() {
     </div>
   );
 }
-
