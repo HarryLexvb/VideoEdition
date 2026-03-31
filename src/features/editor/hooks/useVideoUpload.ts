@@ -56,7 +56,7 @@ export function useVideoUpload({
     }
 
     return instance;
-  }, []); // Solo crear una vez
+  }, []);
 
   useEffect(() => {
     function handleFileAdded(file: UppyAnyFile): void {
@@ -74,7 +74,7 @@ export function useVideoUpload({
         onUploadStateChange('uploading', 'Subiendo con Tus en modo reanudable.');
         void uppy.upload();
       } else {
-        onUploadStateChange('idle', 'Carga local lista. Define VITE_TUS_ENDPOINT para habilitar subida reanudable.');
+        onUploadStateChange('idle', 'Carga local lista.');
       }
     }
 
@@ -87,10 +87,7 @@ export function useVideoUpload({
       _file: UppyAnyFile | undefined,
       progress: { bytesUploaded: number; bytesTotal: number | null },
     ): void {
-      if (!progress.bytesTotal) {
-        return;
-      }
-
+      if (!progress.bytesTotal) return;
       const percentage = Math.round((progress.bytesUploaded / progress.bytesTotal) * 100);
       setUploadProgress(percentage);
     }
@@ -98,13 +95,9 @@ export function useVideoUpload({
     function handleUploadSuccess(_file: UppyAnyFile | undefined, response: { uploadURL?: string }): void {
       const uploadURL = response.uploadURL ?? '';
       const uploadId = uploadURL.split('/').filter(Boolean).pop() ?? uploadURL;
-
       setUploadProgress(100);
-      onUploadStateChange('uploaded', 'Subida reanudable completada.');
-
-      if (uploadId) {
-        onUploadIdReceived(uploadId);
-      }
+      onUploadStateChange('uploaded', 'Subida completada.');
+      if (uploadId) onUploadIdReceived(uploadId);
     }
 
     function handleError(error: Error): void {
@@ -127,11 +120,9 @@ export function useVideoUpload({
     };
   }, [isTusEnabled, onUploadIdReceived, onUploadStateChange, onVideoSelected, uppy]);
 
-  // Cleanup solo al desmontar
   useEffect(() => {
     return () => {
       uppy.cancelAll();
-      uppy.close();
     };
   }, [uppy]);
 
