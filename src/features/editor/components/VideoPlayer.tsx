@@ -55,7 +55,7 @@ export function VideoPlayer({
       playerRef.current = null;
       setIsPlayerReady(false);
     };
-  }, []); // Solo se ejecuta una vez al montar
+  }, []); // Solo se ejecuta una vez al montar — el <video> siempre está en el DOM
 
   // 2. Pasar mediaElement al padre cuando el player esté listo
   useEffect(() => {
@@ -270,8 +270,19 @@ export function VideoPlayer({
   return (
     <section className="group rounded-3xl border border-white/40 bg-gradient-to-br from-slate-900 via-slate-950 to-slate-900 p-5 shadow-[0_24px_55px_-30px_rgba(2,6,23,0.9)] transition-all hover:shadow-[0_24px_65px_-25px_rgba(2,6,23,0.95)] dark:border-slate-800/60 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950">
       <div className="relative aspect-video overflow-hidden rounded-2xl bg-slate-950 ring-1 ring-white/5">
-        {!video ? (
-          <div className="flex h-full w-full flex-col items-center justify-center gap-4 text-slate-400">
+        {/* El <video> siempre está en el DOM para que Plyr se inicialice una sola vez al montar */}
+        <video
+          ref={videoRef}
+          className="h-full w-full"
+          playsInline
+          controls
+          preload="metadata"
+          aria-label="Vista previa del video"
+        />
+
+        {/* Placeholder encima mientras no hay video cargado */}
+        {!video && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 text-slate-400 bg-slate-950">
             <div className="rounded-2xl bg-slate-800/50 p-6 ring-1 ring-white/5">
               <FileVideo className="h-16 w-16 text-slate-500" strokeWidth={1.5} aria-hidden="true" />
             </div>
@@ -280,15 +291,6 @@ export function VideoPlayer({
               <p className="mt-1 text-sm text-slate-500">Carga un archivo para comenzar la edicion</p>
             </div>
           </div>
-        ) : (
-          <video
-            ref={videoRef}
-            className="h-full w-full"
-            playsInline
-            controls
-            preload="metadata"
-            aria-label="Vista previa del video"
-          />
         )}
       </div>
       <div className="mt-4 flex items-center justify-between rounded-xl bg-slate-800/40 px-4 py-2.5 ring-1 ring-white/5 backdrop-blur-sm">

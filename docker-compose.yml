@@ -1,0 +1,56 @@
+services:
+  # Backend API (Fastify + FFmpeg)
+  api:
+    build: ./apps/api
+    container_name: videoedition-api
+    ports:
+      - '3000:3000'
+    volumes:
+      - uploads_data:/app/uploads
+      - results_data:/app/results
+      - temp_data:/app/temp
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      HOST: 0.0.0.0
+      UPLOADS_DIR: /app/uploads
+      RESULTS_DIR: /app/results
+      TEMP_DIR: /app/temp
+      CORS_ORIGIN: '*'
+    depends_on:
+      - tusd
+    restart: unless-stopped
+
+  # Servidor TUS para uploads resumibles (Uppy compatible)
+  tusd:
+    image: tusproject/tusd:latest
+    container_name: videoedition-tusd
+    user: root       # necesario para escribir en el volumen en Docker Desktop/Windows
+    ports:
+      - '1080:8080'     # tusd escucha en 8080 por defecto internamente
+    volumes:
+      - uploads_data:/srv/tusd-data
+    command:
+      - '-upload-dir=/srv/tusd-data'
+      - '-hooks-http=http://api:3000/hooks/upload'
+      - '-hooks-http-retry=3'
+      - '-hooks-http-backoff=1s'     # duration: debe llevar unidad (s, ms, etc.)
+    restart: unless-stopped
+
+  # Frontend (build de producción servido por Nginx)
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+    container_name: videoedition-web
+    ports:
+      - '80:80'
+    depends_on:
+      - api
+      - tusd
+    restart: unless-stopped
+
+volumes:
+  uploads_data:
+  results_data:
+  temp_data:
