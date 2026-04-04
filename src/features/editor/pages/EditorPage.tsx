@@ -85,13 +85,6 @@ export function EditorPage() {
 
   const { uppy, isDashboardOpen, setDashboardOpen, isTusEnabled, uploadProgress, uploadError } = useVideoUpload({
     onVideoSelected: (file: File) => {
-      // Validar tamaño del archivo antes de procesar
-      const MAX_SIZE = 2 * 1024 * 1024 * 1024; // 2GB
-      if (file.size > MAX_SIZE) {
-        setUiError('El video excede el tamaño máximo permitido (2GB)');
-        return;
-      }
-
       // Revocar URL anterior si existe
       if (previousObjectUrlRef.current) {
         URL.revokeObjectURL(previousObjectUrlRef.current);
@@ -113,7 +106,7 @@ export function EditorPage() {
       });
 
       setUiError(null);
-      setUiMessage('Video cargado correctamente. Espera a que se genere la linea de tiempo.');
+      setUiMessage('Video cargado correctamente. El timeline se está generando automáticamente.');
       
       setTimeout(() => setDashboardOpen(false), 300);
     },

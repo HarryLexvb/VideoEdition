@@ -263,8 +263,8 @@ const EPSILON = 0.001; // 1ms
 
 ### PROBLEMA #6: MENSAJE DE UI ENGAÑOSO
 **Prioridad:** MEDIA  
-**Estado:** 🔜 PENDIENTE  
-**Impacto:** BAJO - Confunde al usuario
+**Estado:** ✅ RESUELTO  
+**Impacto:** BAJO - Mensaje más claro y preciso
 
 **Descripción:**
 El mensaje "Espera a que se genere la linea de tiempo" es engañoso porque el timeline se genera inmediatamente.
@@ -287,9 +287,17 @@ Cambiar mensaje a:
 setUiMessage('Video cargado correctamente. El timeline se está generando automáticamente.');
 ```
 
+**Implementación:**
+- Actualizado mensaje en `EditorPage.tsx` línea 115
+- Mensaje más preciso que refleja el comportamiento real
+
 **Validación:**
-- [ ] Mensaje más preciso y claro
-- [ ] Build exitoso
+- [x] Build exitoso
+- [x] Mensaje más claro para el usuario
+
+**Resolución:**
+- [x] 2026-04-03: Mensaje actualizado en EditorPage.tsx
+- [x] 2026-04-03: Build validado exitosamente
 
 ---
 
@@ -297,8 +305,8 @@ setUiMessage('Video cargado correctamente. El timeline se está generando autom�
 
 ### PROBLEMA #7: VALIDACIÓN DE TAMAÑO DUPLICADA
 **Prioridad:** BAJA  
-**Estado:** 🔜 PENDIENTE  
-**Impacto:** BAJO - Viola DRY, mantenibilidad
+**Estado:** ✅ RESUELTO  
+**Impacto:** BAJO - Código más limpio (DRY)
 
 **Descripción:**
 La validación de tamaño máximo de archivo (2GB) está duplicada en `useVideoUpload.ts` y en `EditorPage.tsx`.
@@ -317,10 +325,19 @@ Defensa en profundidad implementada sin refactorización posterior.
 **Solución Propuesta:**
 Eliminar validación duplicada en `EditorPage.tsx` y confiar en la restricción de Uppy.
 
+**Implementación:**
+- Eliminada validación manual de 2GB en callback `onVideoSelected`
+- Uppy ya tiene configurado `maxFileSize: MAX_VIDEO_SIZE_BYTES` en `useVideoUpload.ts`
+- Principio DRY (Don't Repeat Yourself) respetado
+
 **Validación:**
-- [ ] Uppy rechaza archivos >2GB
-- [ ] No hay validación redundante
-- [ ] Build exitoso
+- [x] Uppy rechaza archivos >2GB correctamente
+- [x] No hay validación redundante
+- [x] Build exitoso
+
+**Resolución:**
+- [x] 2026-04-03: Validación duplicada eliminada de EditorPage.tsx
+- [x] 2026-04-03: Build validado exitosamente
 
 ---
 
@@ -419,9 +436,9 @@ Ocultar sección si `import.meta.env.VITE_API_BASE_URL` no está definido.
 
 ## 📈 PROGRESO GENERAL
 
-**Completados:** 5/10 (50%)  
+**Completados:** 7/10 (70%)  
 **En Progreso:** 0/10 (0%)  
-**Pendientes:** 5/10 (50%)
+**Pendientes:** 3/10 (30%)
 
 ---
 
@@ -444,6 +461,12 @@ Ocultar sección si `import.meta.env.VITE_API_BASE_URL` no está definido.
   - ✅ Build exitoso
 - ✅ **PROBLEMA #5 RESUELTO:** EPSILON reducido de 20ms a 1ms para mayor precisión
   - ✅ segments.ts actualizado
+  - ✅ Build exitoso
+- ✅ **PROBLEMA #6 RESUELTO:** Mensaje UI corregido (más preciso)
+  - ✅ EditorPage.tsx actualizado
+  - ✅ Build exitoso
+- ✅ **PROBLEMA #7 RESUELTO:** Validación duplicada eliminada (DRY)
+  - ✅ EditorPage.tsx limpiado
   - ✅ Build exitoso
 - 📝 Priorización técnica establecida
 
