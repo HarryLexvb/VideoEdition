@@ -11,6 +11,7 @@
 - ✅ **Carga de videos** (hasta 2GB) - Drag & drop o click
 - ✅ **Preview profesional** con controles Plyr
 - ✅ **Timeline interactivo** con waveform (WaveSurfer.js)
+- ✅ **Recorte de video (Trim Range)** ⭐ NUEVO - Selección visual de rango inicio/fin
 - ✅ **Sistema de segmentos** con marcado keep/remove
 - ✅ **Undo/Redo completo** (Ctrl+Z / Ctrl+Shift+Z)
 - ✅ **Dark mode** con persistencia
@@ -79,13 +80,27 @@ Accede en: `http://localhost:5173`
 - El **timeline con waveform** se genera automáticamente debajo
 - Espera unos segundos mientras carga los metadatos
 
-### 3️⃣ Editar
+### 3️⃣ Recortar Video (Trim) ⭐ NUEVO
+
+**Panel de Recorte (sidebar derecho):**
+- **Marcar Inicio:** Posiciona el cabezal y haz click en "Marcar Inicio"
+- **Marcar Fin:** Mueve el cabezal al punto final y haz click en "Marcar Fin"
+- **Ajuste Visual:** Arrastra los bordes de la región azul en el timeline para redimensionar
+- **Limpiar:** Botón "Limpiar" para resetear la selección
+- **Visualización:** El panel muestra inicio, fin y duración del rango seleccionado
+
+**Notas:**
+- La región de trim aparece como una banda azul semi-transparente
+- Los handles en los bordes permiten ajuste preciso
+- El historial (Ctrl+Z) captura cambios de trim
+
+### 4️⃣ Editar Segmentos
 
 - **Cortar:** Click en "Cortar en cabezal" para dividir en el punto actual
 - **Navegar:** Click en el timeline para mover el playhead
 - **Reproducir:** Usa los controles del player
 
-### 4️⃣ Gestionar Segmentos
+### 5️⃣ Gestionar Segmentos
 
 **Panel lateral derecho:**
 - Ver lista de segmentos creados
@@ -95,9 +110,15 @@ Accede en: `http://localhost:5173`
   - 🔴 **Remove** (rojo) - Eliminar
 - **Undo/Redo:** Ctrl+Z / Ctrl+Shift+Z
 
-### 5️⃣ Exportar (⚠️ No Funcional)
+### 6️⃣ Exportar (⚠️ No Funcional)
 
-Los botones "Exportar" y "Extraer audio" preparan la configuración pero **NO procesan el video** porque no hay backend implementado.
+Los botones "Exportar" y "Extraer audio" preparan la configuración (incluyendo trim range y segmentos) pero **NO procesan el video** porque no hay backend implementado.
+
+**Payload generado incluye:**
+- Source (archivo, tamaño, tipo)
+- Timeline (segmentos con disposición keep/remove)
+- **Trim Range** (inicio, fin, duración) ⭐ NUEVO
+- Metadata (duración total, contadores)
 
 ## 🏗️ Estructura del Proyecto
 
@@ -110,6 +131,7 @@ VideoEdition/
 │   │       ├── components/        # Componentes del editor
 │   │       │   ├── VideoPlayer.tsx
 │   │       │   ├── TimelinePanel.tsx
+│   │       │   ├── TrimControls.tsx    # ⭐ NUEVO - Panel de recorte
 │   │       │   ├── SidebarPanel.tsx
 │   │       │   └── HeaderBar.tsx
 │   │       ├── hooks/            # useVideoUpload
@@ -123,6 +145,7 @@ VideoEdition/
 │   ├── router/                   # AppRouter
 │   └── styles/                   # global.css
 ├── public/
+├── PROJECT_FIX_PLAN.md        # ⭐ Plan de corrección técnica
 └── index.html
 ```
 
@@ -164,6 +187,13 @@ VideoEdition/
 - Footer muestra "Media: conectado"
 - Console muestra logs de WaveSurfer
 - Prueba con otro video más pequeño
+
+### Región de trim no aparece ⭐ NUEVO
+
+**Solución:**
+- Debes marcar tanto inicio como fin para que aparezca la región azul
+- Si solo marcas uno, el panel mostrará el valor pero no habrá región visual
+- Usa "Limpiar" para resetear y volver a intentar
 
 ### Formatos Soportados
 
@@ -211,6 +241,7 @@ Si defines esto, habilita upload reanudable vía Tus (requiere backend).
 **Lo que SÍ hace:**
 - ✅ Cargar y reproducir videos localmente
 - ✅ Visualizar waveform
+- ✅ **Recortar video seleccionando rango inicio/fin** ⭐ NUEVO
 - ✅ Crear y marcar segmentos
 - ✅ Gestionar historial de cambios
 
@@ -274,9 +305,9 @@ MIT License
 
 ---
 
-**Versión:** 0.4.0  
-**Última actualización:** 31 de Marzo, 2026  
-**Estado:** Frontend completo y funcional | Backend pendiente
+**Versión:** 0.5.0  
+**Última actualización:** 03 de Abril, 2026  
+**Estado:** Frontend completo con trim/recorte | Backend pendiente
 
 ---
 
@@ -289,19 +320,24 @@ MIT License
 ✅ Área de carga sin respuesta al click  
 ✅ Callbacks inestables causando re-renders  
 ✅ Object URLs sin cleanup  
-✅ Caracteres especiales mal codificados (UTF-8)
+✅ Caracteres especiales mal codificados (UTF-8)  
+✅ Falta de funcionalidad de trim/recorte de video  
+✅ Historial no capturaba trim range  
+✅ Regions de timeline no redimensionables
 
-### Cambios Recientes (v0.4.0)
+### Cambios Recientes (v0.5.0)
 
-- Corregida codificación UTF-8 en textos
-- Optimizado flujo de carga de video
-- Mejorada UI del botón "Cargar Video"
-- Estabilizados callbacks con useCallback
-- Agregado soporte para click en área de drop
-- README actualizado con información verídica
+- ⭐ **NUEVO:** Funcionalidad completa de trim/recorte de video
+- ⭐ **NUEVO:** Componente TrimControls con botones "Marcar Inicio/Fin"
+- ⭐ **NUEVO:** Región de trim azul redimensionable en timeline
+- ✅ Historial (undo/redo) ahora captura trim range
+- ✅ Payload de exportación incluye trimRange con metadata
+- ✅ Store extendido con 7 acciones de trim
+- ✅ TypeCheck y Build validados exitosamente
+- 📝 Documentación actualizada con estado real del proyecto
 
 ---
 
 **⚠️ RECORDATORIO FINAL**
 
-Este proyecto es un **editor de video no destructivo frontend**. La funcionalidad de procesamiento real (exportar, extraer audio) requiere implementar un backend con FFmpeg. El estado actual solo permite visualizar, segmentar y preparar la configuración de edición.
+Este proyecto es un **editor de video no destructivo frontend**. La funcionalidad de procesamiento real (exportar, extraer audio) requiere implementar un backend con FFmpeg. El estado actual permite visualizar, segmentar, **recortar (trim)**, y preparar la configuración de edición completa para enviar a un backend futuro.
