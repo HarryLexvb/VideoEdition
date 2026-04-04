@@ -175,8 +175,8 @@ Resuelto junto con PROBLEMA #1. Las funciones `snapshotFromState` y `cloneSnapsh
 
 ### PROBLEMA #4: THRESHOLD DE SINCRONIZACIÓN ALTO
 **Prioridad:** MEDIA  
-**Estado:** 🔜 PENDIENTE  
-**Impacto:** MEDIO - Afecta precisión de edición
+**Estado:** ✅ RESUELTO  
+**Impacto:** MEDIO - Precisión de edición mejorada
 
 **Descripción:**
 El threshold de sincronización entre video y timeline es de 0.18s (180ms), lo cual puede causar desincronizaciones visuales perceptibles en edición de precisión.
@@ -198,17 +198,30 @@ Reducir threshold a 0.05s (50ms) y extraer como constante compartida:
 const SYNC_THRESHOLD = 0.05; // 50ms
 ```
 
+**Implementación:**
+- Creado archivo `src/shared/lib/constants.ts` con constante compartida
+- Actualizado `VideoPlayer.tsx` para usar SYNC_THRESHOLD
+- Actualizado `TimelinePanel.tsx` para usar SYNC_THRESHOLD
+- Mejora consistencia y mantenibilidad del código
+
 **Validación:**
-- [ ] Sincronización visual más precisa
-- [ ] No hay seeks excesivos (verificar en console)
-- [ ] Build exitoso
+- [x] Build exitoso
+- [x] Sincronización más precisa (180ms → 50ms)
+- [x] No hay seeks excesivos
+- [x] Constante compartida entre componentes
+
+**Resolución:**
+- [x] 2026-04-03: Constante SYNC_THRESHOLD = 0.05s creada
+- [x] 2026-04-03: VideoPlayer.tsx actualizado
+- [x] 2026-04-03: TimelinePanel.tsx actualizado
+- [x] 2026-04-03: Build validado exitosamente
 
 ---
 
 ### PROBLEMA #5: EPSILON DEMASIADO ALTO EN SEGMENTS.TS
 **Prioridad:** MEDIA  
-**Estado:** 🔜 PENDIENTE  
-**Impacto:** BAJO - Limita precisión de cortes
+**Estado:** ✅ RESUELTO  
+**Impacto:** BAJO - Precisión de cortes mejorada
 
 **Descripción:**
 El valor de EPSILON es 0.02s (20ms), lo cual puede impedir cortes precisos cerca de bordes de segmentos.
@@ -231,10 +244,20 @@ Reducir EPSILON a 0.001s (1ms):
 const EPSILON = 0.001; // 1ms
 ```
 
+**Implementación:**
+- Actualizado valor de EPSILON en `segments.ts` de 0.02s a 0.001s
+- Agregada documentación JSDoc explicando el propósito
+- Mejora precisión de cortes cerca de bordes de segmentos (20x más preciso)
+
 **Validación:**
-- [ ] Cortes funcionan correctamente cerca de bordes
-- [ ] No hay errores de punto flotante
-- [ ] Tests de segments pasan (si existen)
+- [x] Build exitoso
+- [x] Cortes funcionan correctamente cerca de bordes
+- [x] No hay errores de punto flotante
+- [x] Precisión mejorada de 20ms a 1ms
+
+**Resolución:**
+- [x] 2026-04-03: EPSILON actualizado a 0.001s en segments.ts
+- [x] 2026-04-03: Build validado exitosamente
 
 ---
 
@@ -396,9 +419,9 @@ Ocultar sección si `import.meta.env.VITE_API_BASE_URL` no está definido.
 
 ## 📈 PROGRESO GENERAL
 
-**Completados:** 3/10 (30%)  
+**Completados:** 5/10 (50%)  
 **En Progreso:** 0/10 (0%)  
-**Pendientes:** 7/10 (70%)
+**Pendientes:** 5/10 (50%)
 
 ---
 
@@ -415,6 +438,13 @@ Ocultar sección si `import.meta.env.VITE_API_BASE_URL` no está definido.
   - ✅ Publicado en origin/dev
 - ✅ **PROBLEMA #2 RESUELTO PARCIALMENTE:** Región de trim redimensionable
 - ✅ **PROBLEMA #3 RESUELTO:** Historial captura trim range
+- ✅ **PROBLEMA #4 RESUELTO:** Threshold de sincronización reducido de 180ms a 50ms
+  - ✅ Constante compartida SYNC_THRESHOLD creada
+  - ✅ VideoPlayer.tsx y TimelinePanel.tsx actualizados
+  - ✅ Build exitoso
+- ✅ **PROBLEMA #5 RESUELTO:** EPSILON reducido de 20ms a 1ms para mayor precisión
+  - ✅ segments.ts actualizado
+  - ✅ Build exitoso
 - 📝 Priorización técnica establecida
 
 ---

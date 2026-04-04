@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { FileVideo, Play } from 'lucide-react';
 import Plyr from 'plyr';
 
+import { SYNC_THRESHOLD } from '../../../shared/lib/constants';
 import { formatTime } from '../../../shared/lib/formatTime';
 import type { VideoAsset } from '../model/types';
 
@@ -250,9 +251,9 @@ export function VideoPlayer({
       return;
     }
 
-    // Solo actualizar si la diferencia es significativa (> 0.18s)
+    // Solo actualizar si la diferencia es significativa
     const currentTime = mediaElement.currentTime;
-    if (Math.abs(currentTime - requestedTime) > 0.18) {
+    if (Math.abs(currentTime - requestedTime) > SYNC_THRESHOLD) {
       mediaElement.currentTime = requestedTime;
     }
   }, [requestedTime, video]);

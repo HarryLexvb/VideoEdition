@@ -2,7 +2,11 @@ import { createId } from '../../../shared/lib/id';
 
 import type { SegmentDisposition, TimelineSegment } from './types';
 
-const EPSILON = 0.02;
+/**
+ * Tolerancia para comparaciones de punto flotante en operaciones de tiempo.
+ * Valor: 1ms (0.001s) - Balance entre precisión y estabilidad numérica
+ */
+const EPSILON = 0.001;
 
 export function createInitialSegment(duration: number): TimelineSegment {
   return {

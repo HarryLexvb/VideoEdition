@@ -5,6 +5,7 @@ import RegionsPlugin from 'wavesurfer.js/dist/plugins/regions.esm.js';
 import WaveSurfer from 'wavesurfer.js';
 
 import { Button } from '../../../shared/components/Button';
+import { SYNC_THRESHOLD } from '../../../shared/lib/constants';
 import { formatTime } from '../../../shared/lib/formatTime';
 import type { TimelineSegment } from '../model/types';
 
@@ -192,7 +193,7 @@ export function TimelinePanel({
 
     const currentTime = waveSurfer.getCurrentTime();
     // Solo actualizar si la diferencia es significativa
-    if (Math.abs(currentTime - playheadTime) > 0.18) {
+    if (Math.abs(currentTime - playheadTime) > SYNC_THRESHOLD) {
       waveSurfer.setTime(playheadTime);
     }
   }, [duration, playheadTime]);
