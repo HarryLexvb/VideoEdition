@@ -11,6 +11,7 @@ import type { TimelineSegment } from '../model/types';
 
 interface TimelinePanelProps {
   mediaElement: HTMLVideoElement | null;
+  mediaSourceUrl: string | null;
   segments: TimelineSegment[];
   selectedSegmentId: string | null;
   duration: number;
@@ -36,6 +37,7 @@ function getRegionColor(segment: TimelineSegment, selectedSegmentId: string | nu
 
 export function TimelinePanel({
   mediaElement,
+  mediaSourceUrl,
   segments,
   selectedSegmentId,
   duration,
@@ -76,14 +78,15 @@ export function TimelinePanel({
   const keepCount = useMemo(() => segments.filter((segment) => segment.disposition === 'keep').length, [segments]);
   const removeCount = useMemo(() => segments.filter((segment) => segment.disposition === 'remove').length, [segments]);
 
-  // Inicializar WaveSurfer solo cuando mediaElement esté disponible
+  // Inicializar WaveSurfer cuando hay mediaElement y fuente activa
   useEffect(() => {
-    if (!containerRef.current || !mediaElement) {
-      console.log('[TimelinePanel] Esperando containerRef y mediaElement');
+    if (!containerRef.current || !mediaElement || !mediaSourceUrl) {
+      console.log('[TimelinePanel] Esperando containerRef, mediaElement y mediaSourceUrl');
       return;
     }
 
     console.log('[TimelinePanel] ✓ Inicializando WaveSurfer');
+    console.log('[TimelinePanel] Source URL:', mediaSourceUrl);
     console.log('[TimelinePanel] MediaElement readyState:', mediaElement.readyState);
     console.log('[TimelinePanel] MediaElement duration:', mediaElement.duration);
 
@@ -143,7 +146,7 @@ export function TimelinePanel({
       waveSurferRef.current = null;
       regionsPluginRef.current = null;
     };
-  }, [mediaElement]); // Solo recrear cuando mediaElement cambie
+  }, [mediaElement, mediaSourceUrl]);
 
   // Actualizar regions cuando cambien segments, selectedSegmentId o trim
   useEffect(() => {

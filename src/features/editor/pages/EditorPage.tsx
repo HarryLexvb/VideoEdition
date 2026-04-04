@@ -370,6 +370,7 @@ export function EditorPage() {
 
             <TimelinePanel
               mediaElement={mediaElement}
+              mediaSourceUrl={video?.localUrl ?? null}
               segments={segments}
               selectedSegmentId={selectedSegmentId}
               duration={video?.duration ?? 0}

@@ -1,7 +1,6 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 
 import { FileVideo, Play } from 'lucide-react';
-import Plyr from 'plyr';
 
 import { SYNC_THRESHOLD } from '../../../shared/lib/constants';
 import { formatTime } from '../../../shared/lib/formatTime';
@@ -23,58 +22,10 @@ export function VideoPlayer({
   onDurationChange,
 }: VideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
-  const playerRef = useRef<Plyr | null>(null);
-  const [isPlayerReady, setIsPlayerReady] = useState(false);
   const currentVideoUrlRef = useRef<string | null>(null);
   const metadataIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // 1. Inicializar Plyr solo una vez al montar el componente
-  useEffect(() => {
-    const mediaElement = videoRef.current;
-    if (!mediaElement || playerRef.current) {
-      return;
-    }
-
-    console.log('[VideoPlayer] Inicializando Plyr player');
-
-    const player = new Plyr(mediaElement, {
-      controls: ['play-large', 'play', 'progress', 'current-time', 'duration', 'mute', 'volume', 'settings', 'fullscreen'],
-      settings: ['speed'],
-      speed: {
-        selected: 1,
-        options: [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2],
-      },
-    });
-
-    playerRef.current = player;
-    setIsPlayerReady(true);
-    console.log('[VideoPlayer] Plyr inicializado correctamente');
-
-    return () => {
-      console.log('[VideoPlayer] Destruyendo Plyr');
-      player.destroy();
-      playerRef.current = null;
-      setIsPlayerReady(false);
-    };
-  }, []); // Solo se ejecuta una vez al montar — el <video> siempre está en el DOM
-
-  // 2. Pasar mediaElement al padre cuando el player esté listo
-  useEffect(() => {
-    const mediaElement = videoRef.current;
-    if (!mediaElement || !isPlayerReady) {
-      return;
-    }
-
-    console.log('[VideoPlayer] MediaElement listo, pasando a TimelinePanel');
-    onMediaReady(mediaElement);
-
-    return () => {
-      console.log('[VideoPlayer] Limpiando mediaElement del padre');
-      onMediaReady(null);
-    };
-  }, [isPlayerReady, onMediaReady]);
-
-  // 3. Event listeners del video - configurar una sola vez
+  // 1. Event listeners del video - configurar una sola vez
   useEffect(() => {
     const mediaElement = videoRef.current;
     if (!mediaElement) {
@@ -148,9 +99,9 @@ export function VideoPlayer({
       mediaElement.removeEventListener('canplay', handleCanPlay);
       mediaElement.removeEventListener('error', handleError);
     };
-  }, []); // Listeners estables, sin dependencias de callbacks
+  }, [onTimeUpdate, onDurationChange]);
 
-  // 4. Cargar el video cuando cambia - ESTE ES EL EFECTO CRÍTICO
+  // 2. Cargar el video cuando cambia - ESTE ES EL EFECTO CRÍTICO
   useEffect(() => {
     const mediaElement = videoRef.current;
     if (!mediaElement) {
@@ -166,6 +117,7 @@ export function VideoPlayer({
     // Si no hay video, limpiar
     if (!video) {
       console.log('[VideoPlayer] Limpiando video anterior');
+      mediaElement.pause();
       mediaElement.removeAttribute('src');
       mediaElement.load();
       currentVideoUrlRef.current = null;
@@ -244,7 +196,23 @@ export function VideoPlayer({
     };
   }, [video]); // Solo depende de video, no de callbacks
 
-  // 5. Sincronizar tiempo cuando se solicita seek externo
+  // 3. Exponer mediaElement al timeline solo cuando hay video activo
+  useEffect(() => {
+    const mediaElement = videoRef.current;
+
+    if (!mediaElement || !video?.localUrl) {
+      onMediaReady(null);
+      return;
+    }
+
+    onMediaReady(mediaElement);
+
+    return () => {
+      onMediaReady(null);
+    };
+  }, [video?.localUrl, onMediaReady]);
+
+  // 4. Sincronizar tiempo cuando se solicita seek externo
   useEffect(() => {
     const mediaElement = videoRef.current;
     if (!mediaElement || !video || !Number.isFinite(requestedTime)) {
@@ -258,7 +226,7 @@ export function VideoPlayer({
     }
   }, [requestedTime, video]);
 
-  // 6. Cleanup general al desmontar
+  // 5. Cleanup general al desmontar
   useEffect(() => {
     return () => {
       if (metadataIntervalRef.current) {
