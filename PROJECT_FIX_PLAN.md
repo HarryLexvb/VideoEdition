@@ -18,6 +18,13 @@ Este documento registra todos los problemas detectados en la auditoría técnica
 - Medios: 3
 - Bajos: 2
 
+## ACTUALIZACION DE CONTEXTO ARQUITECTONICO (2026-04-04)
+
+Auditoria forense posterior al plan original:
+- El repositorio SI contiene backend en apps/api (Fastify + rutas + FFmpeg + storage local).
+- La clasificacion tecnica correcta es backend parcial operativo (MVP), no frontend-only.
+- Las referencias de este documento a "backend inexistente" quedan reemplazadas por esta actualizacion.
+
 ---
 
 ## 🔴 PROBLEMAS CRÍTICOS
@@ -344,7 +351,7 @@ Eliminar validación duplicada en `EditorPage.tsx` y confiar en la restricción 
 ### PROBLEMA #8: POLLING SIN TIMEOUT
 **Prioridad:** BAJA  
 **Estado:** ❌ NO IMPLEMENTADO  
-**Impacto:** BAJO - Requiere backend para validar
+**Impacto:** BAJO - Pendiente de robustez de polling en frontend
 
 **Descripción:**
 El polling de jobs de backend continúa indefinidamente si el servidor nunca responde.
@@ -371,11 +378,11 @@ No se implementó timeout por simplicidad.
 Implementar timeout de 5 minutos y detener polling.
 
 **Justificación de NO implementación:**
-Este problema requiere un backend funcional para poder validar que el timeout funcione correctamente. Dado que el proyecto es frontend-only, implementar esto sin forma de probarlo podría introducir bugs. Se dejará para cuando el backend esté implementado.
+El backend existe y esta operativo en `apps/api`, pero esta mejora no se implemento en esta iteracion. Queda pendiente una validacion E2E (frontend + API) con escenarios de timeout y reintento.
 
 **Validación:**
-- [ ] Backend requerido para validar
-- [ ] No implementado en esta fase
+- [ ] Validar timeout con pruebas E2E frontend + API
+- [x] No implementado en esta fase
 
 ---
 
@@ -458,7 +465,7 @@ Ocultar sección si `import.meta.env.VITE_API_BASE_URL` no está definido.
 ## 📈 PROGRESO GENERAL
 
 **Completados:** 9/10 (90%)  
-**No Implementados:** 1/10 (10%) - Requiere backend  
+**No Implementados:** 1/10 (10%) - Pendiente de implementacion  
 **Pendientes:** 0/10 (0%)
 
 ---
@@ -489,7 +496,7 @@ Ocultar sección si `import.meta.env.VITE_API_BASE_URL` no está definido.
 - ✅ **PROBLEMA #7 RESUELTO:** Validación duplicada eliminada (DRY)
   - ✅ EditorPage.tsx limpiado
   - ✅ Build exitoso
-- ❌ **PROBLEMA #8 NO IMPLEMENTADO:** Polling timeout requiere backend para validar
+- ❌ **PROBLEMA #8 NO IMPLEMENTADO:** Polling timeout pendiente de implementacion y validacion E2E
 - ✅ **PROBLEMA #9 RESUELTO:** formatTime con soporte opcional de milisegundos
   - ✅ formatTime.ts actualizado con parámetro showMilliseconds
   - ✅ Build exitoso
@@ -505,7 +512,7 @@ Ocultar sección si `import.meta.env.VITE_API_BASE_URL` no está definido.
 **Fecha de finalización:** 03 de Abril, 2026  
 **Total de problemas:** 10  
 **Resueltos:** 9 (90%)  
-**No implementados:** 1 (10%) - Requiere backend
+**No implementados:** 1 (10%) - Pendiente de implementacion
 
 **Resumen de logros:**
 - ✅ Funcionalidad completa de trim/recorte implementada
@@ -515,8 +522,8 @@ Ocultar sección si `import.meta.env.VITE_API_BASE_URL` no está definido.
 - ✅ Features adicionales (milisegundos en formatTime)
 - ✅ Todas las validaciones con build exitoso
 
-**Problema pendiente para fase backend:**
-- ❌ PROBLEMA #8: Timeout en polling (requiere backend funcional)
+**Problema pendiente de robustez frontend/API:**
+- ❌ PROBLEMA #8: Timeout en polling (pendiente de implementacion y validacion E2E)
 
 ---
 

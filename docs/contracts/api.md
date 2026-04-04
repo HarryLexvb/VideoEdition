@@ -1,51 +1,63 @@
-# Contrato API — Editor Web de Video
+# Contrato API - VideoEdition
 
-Versión: 1.0 — congelada para integración frontend/backend.
+Version: 1.1 (alineada al codigo actual)
 
----
+Estado del backend: parcial operativo (MVP).
 
 ## Base URL
 
-```
-http://localhost:3000   (desarrollo)
-http://<VPS_IP>         (producción vía Nginx)
+Hay dos formas de consumir la API:
+
+1. Directa al contenedor/proceso API:
+
+```text
+http://localhost:3000
 ```
 
-## Upload (TUS — tusd)
+2. Via Nginx (cuando web corre en Docker Compose):
 
-```
-TUS endpoint: http://localhost:1080/files/
+```text
+http://localhost/api
 ```
 
-El frontend usa Uppy con `@uppy/tus`. Al completar el upload, tusd llama al hook:
+Nota: en Nginx existe proxy /api/ -> api:3000/.
 
+## Upload (Tus)
+
+Endpoints validos segun despliegue:
+
+```text
+http://localhost:1080/files/   (tusd directo)
+http://localhost/files/        (via Nginx)
 ```
+
+Al finalizar upload, tusd notifica:
+
+```text
 POST /hooks/upload
 ```
-
-El `uploadId` retornado por tusd se guarda en el store del frontend (`video.uploadId`) y se
-incluye en todos los payloads de jobs.
-
----
 
 ## Endpoints
 
 ### GET /health
 
-Verificación del estado del servidor.
+Health check del backend.
 
-**Response 200**
+Response 200:
+
 ```json
-{ "ok": true, "timestamp": "2026-04-01T12:00:00.000Z" }
+{
+  "ok": true,
+  "timestamp": "2026-04-04T00:00:00.000Z"
+}
 ```
-
----
 
 ### POST /jobs/export
 
-Inicia un job de exportación de video con los segmentos conservados.
+Encola y procesa un job de exportacion de video.
 
-**Request body**
+Body minimo requerido:
+
 ```json
 {
   "source": {
@@ -55,19 +67,21 @@ Inicia un job de exportación de video con los segmentos conservados.
     "uploadId": "abc123"
   },
   "timeline": [
-    { "id": "seg-1", "start": 0.000, "end": 10.500, "disposition": "keep" },
-    { "id": "seg-2", "start": 10.500, "end": 25.000, "disposition": "remove" },
-    { "id": "seg-3", "start": 25.000, "end": 40.000, "disposition": "keep" }
+    { "id": "seg-1", "start": 0, "end": 10.5, "disposition": "keep" },
+    { "id": "seg-2", "start": 10.5, "end": 18.2, "disposition": "remove" }
   ],
   "meta": {
-    "duration": 40.000,
-    "keepSegmentCount": 2,
+    "duration": 18.2,
+    "keepSegmentCount": 1,
     "removeSegmentCount": 1
   }
 }
 ```
 
-**Response 202**
+Campos adicionales enviados por frontend (por ejemplo trimRange, hasTrimRange, trimDuration) hoy son aceptados pero no son usados por la logica de backend actual.
+
+Response 202:
+
 ```json
 {
   "jobId": "550e8400-e29b-41d4-a716-446655440000",
@@ -76,18 +90,20 @@ Inicia un job de exportación de video con los segmentos conservados.
 }
 ```
 
-**Response 400**
-```json
-{ "error": "El campo source.uploadId es requerido" }
-```
+Response 400:
 
----
+```json
+{
+  "error": "El campo source.uploadId es requerido"
+}
+```
 
 ### POST /jobs/extract-audio
 
-Misma firma que `/jobs/export`. Extrae el audio de los segmentos conservados en MP3.
+Mismo contrato de entrada que /jobs/export. Genera salida MP3.
 
-**Response 202**
+Response 202:
+
 ```json
 {
   "jobId": "550e8400-e29b-41d4-a716-446655440001",
@@ -96,13 +112,12 @@ Misma firma que `/jobs/export`. Extrae el audio de los segmentos conservados en 
 }
 ```
 
----
-
 ### GET /jobs/:jobId
 
-Consulta el estado de un job. El frontend hace polling cada 2.5 s.
+Consulta de estado para polling desde frontend.
 
-**Response 200 — en proceso**
+Response 200 (processing):
+
 ```json
 {
   "jobId": "550e8400-e29b-41d4-a716-446655440000",
@@ -111,17 +126,19 @@ Consulta el estado de un job. El frontend hace polling cada 2.5 s.
 }
 ```
 
-**Response 200 — completado**
+Response 200 (completed):
+
 ```json
 {
   "jobId": "550e8400-e29b-41d4-a716-446655440000",
   "status": "completed",
   "progress": 100,
-  "resultUrl": "/results/export_abc123.mp4"
+  "resultUrl": "http://localhost:3000/results/export_abc123.mp4"
 }
 ```
 
-**Response 200 — fallido**
+Response 200 (failed):
+
 ```json
 {
   "jobId": "550e8400-e29b-41d4-a716-446655440000",
@@ -130,36 +147,74 @@ Consulta el estado de un job. El frontend hace polling cada 2.5 s.
 }
 ```
 
-**Response 404**
-```json
-{ "error": "Job no encontrado" }
-```
+Response 404:
 
----
+```json
+{
+  "error": "Job no encontrado"
+}
+```
 
 ### GET /results/:filename
 
-Descarga el archivo procesado.
+Entrega el archivo procesado desde RESULTS_DIR.
 
-| Header | Valor |
-|--------|-------|
-| Content-Type | `video/mp4` o `audio/mpeg` según extensión |
-| Content-Disposition | `attachment; filename="..."` |
+Headers esperados:
+- Content-Type: video/mp4, audio/mpeg, etc.
+- Content-Disposition: attachment; filename="..."
+- Content-Length: tamano del archivo
 
----
+Seguridad implementada:
+- Sanitizacion de filename via path.basename para evitar path traversal.
 
-## Tipos de status
+### POST /hooks/upload
 
-| Status | Descripción |
-|--------|-------------|
-| `queued` | Job encolado, aún no inició |
-| `processing` | FFmpeg procesando |
-| `completed` | Archivo listo para descargar |
-| `failed` | Error — ver campo `error` |
+Endpoint de hook para tusd (actualmente loguea el evento y responde ok).
 
-## Notas de implementación
+Response 200:
 
-- El campo `uploadId` corresponde al ID del archivo en tusd (sin extensión).
-- FFmpeg usa `-c copy` (sin re-encode) para velocidad. Si se necesita precisión de fotograma exacta, se puede activar re-encode puntual en `services/ffmpeg.ts`.
-- Los archivos temporales se limpian automáticamente tras cada job.
-- El job store es en memoria (MVP). Para producción: BullMQ + Redis.
+```json
+{
+  "ok": true
+}
+```
+
+## Estados de Job
+
+- queued
+- processing
+- completed
+- failed
+
+## Alcance Real Del MVP
+
+Implementado:
+- API Fastify funcional
+- Procesamiento FFmpeg para export y extract-audio
+- Descarga de resultados
+- Integracion con uploads Tus por uploadId
+
+No implementado todavia:
+- Autenticacion y autorizacion
+- Base de datos
+- Cola persistente de jobs (BullMQ/Redis)
+- Validacion de schema en runtime
+- Rate limiting y politicas de seguridad avanzadas
+
+## Validacion E2E Ejecutada
+
+Validacion local ejecutada el 2026-04-04 con un video real:
+- GET /health: 200 OK.
+- POST /jobs/export: job encolado y completado, con descarga de MP4 valida.
+- POST /jobs/extract-audio: job encolado y completado, con descarga de MP3 valida.
+- GET /results/:filename: entrega correcta de archivos generados.
+
+## Referencias De Codigo
+
+- apps/api/src/server.ts
+- apps/api/src/routes/jobs.ts
+- apps/api/src/routes/results.ts
+- apps/api/src/routes/hooks.ts
+- apps/api/src/services/ffmpeg.ts
+- apps/api/src/services/jobStore.ts
+- apps/api/src/storage/local.ts

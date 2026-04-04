@@ -1,356 +1,195 @@
 # VideoCut Studio
 
-> Editor de video no destructivo con interfaz profesional para cargar, visualizar y editar videos localmente mediante timeline interactivo.
+Editor de video no destructivo con frontend React y backend Fastify para procesamiento con FFmpeg.
 
-## 🎯 Estado Actual
+## Estado Real Del Proyecto (Auditoria 2026-04-04)
 
-**✅ Frontend 100% Funcional | ❌ Backend No Implementado**
+Veredicto tecnico: el repositorio SI tiene backend.
 
-### ✨ Funcionalidades Implementadas
+Clasificacion actual:
+- Frontend: funcional para carga, preview, timeline, segmentos, trim e historial.
+- Backend: parcial pero operativo (MVP), con API y procesamiento real de jobs.
+- Produccion endurecida: pendiente (sin autenticacion, sin cola persistente, sin base de datos, sin validacion de schema en runtime).
 
-- ✅ **Carga de videos** (hasta 2GB) - Drag & drop o click
-- ✅ **Preview profesional** con controles Plyr
-- ✅ **Timeline interactivo** con waveform (WaveSurfer.js)
-- ✅ **Recorte de video (Trim Range)** ⭐ NUEVO - Selección visual de rango inicio/fin
-- ✅ **Sistema de segmentos** con marcado keep/remove
-- ✅ **Undo/Redo completo** (Ctrl+Z / Ctrl+Shift+Z)
-- ✅ **Dark mode** con persistencia
-- ✅ **Gestión de estado** con Zustand
-- ✅ **UI responsive** con Tailwind CSS
+## Evidencia Tecnica Del Backend
 
-### ⚠️ Limitaciones Actuales
+Componentes de backend detectados y verificados en codigo:
+- Servidor HTTP Fastify en apps/api/src/server.ts
+- Rutas API en apps/api/src/routes/jobs.ts, apps/api/src/routes/results.ts, apps/api/src/routes/hooks.ts
+- Logica de procesamiento FFmpeg en apps/api/src/services/ffmpeg.ts
+- Almacenamiento local (uploads/results/temp) en apps/api/src/storage/local.ts
+- Job store en memoria en apps/api/src/services/jobStore.ts
+- Configuracion por variables de entorno en apps/api/src/config.ts
+- Contenedores y orquestacion en docker-compose.yml y apps/api/Dockerfile
+- Integracion frontend -> backend en src/features/editor/api/client.ts y src/features/editor/api/hooks.ts
 
-**NO funciona sin backend:**
-- ❌ Export real de video editado
-- ❌ Extracción de audio
-- ❌ Procesamiento con FFmpeg
-- ❌ API/Backend
-- ❌ Storage persistente
-- ❌ Sistema de jobs
+## Arquitectura Actual
 
-## 🛠️ Stack Tecnológico
+### Frontend
+- React + Vite + TypeScript
+- Editor visual (player, timeline, trim, segmentos)
+- Construye payload de job en src/features/editor/model/projectPayload.ts
+- Lanza jobs y hace polling de estado via API
 
-| Categoría | Tecnologías |
-|-----------|-------------|
-| **Core** | React 19.2, TypeScript 5.9, Vite 8 |
-| **Estado** | Zustand 5, TanStack Query 5 |
-| **UI** | Tailwind CSS 3, Lucide React 1 |
-| **Media** | Plyr 3.8 (player), WaveSurfer.js 7 (timeline) |
-| **Upload** | Uppy 5 (con soporte Tus opcional) |
-| **Routing** | React Router DOM 6 |
+### Backend (MVP)
+- Fastify con CORS
+- Endpoints:
+  - GET /health
+  - POST /jobs/export
+  - POST /jobs/extract-audio
+  - GET /jobs/:jobId
+  - GET /results/:filename
+  - POST /hooks/upload
+- Procesa exportacion y extraccion de audio con FFmpeg
+- Retorna resultUrl para descarga
 
-## 📋 Requisitos
+### Upload Reanudable
+- Soporte Tus en frontend via Uppy
+- Servicio tusd en docker-compose.yml
+- Hook de finalizacion en POST /hooks/upload
 
-- **Node.js** 18+ (probado con v23.2.0)
-- **npm** 9+ (probado con 10.9.0)
-- **Navegador moderno** con soporte para:
-  - ES2020+, File API, Blob, URL.createObjectURL
-  - Codec H.264/AAC recomendado
+## Lo Que Si Hace Hoy
 
-## 🚀 Instalación
+- Cargar video localmente
+- Mostrar preview y waveform
+- Definir segmentos keep/remove
+- Definir trim range visual
+- Enviar jobs al backend (si VITE_API_BASE_URL esta configurado)
+- Consultar estado de jobs por polling
+- Descargar resultados desde /results/:filename
+
+## Limitaciones Reales (Sin Sobreestimar)
+
+- Job store en memoria (se pierde al reiniciar el backend)
+- Sin autenticacion/autorizacion
+- Sin base de datos
+- Sin cola distribuida (BullMQ/Redis no implementado)
+- Sin validacion estricta de schema de payload en runtime
+- Escalabilidad limitada por procesamiento en el mismo proceso del API
+
+## Ejecucion
+
+### Opcion A: Frontend Solamente
+
+Util para UI/UX sin procesamiento real.
 
 ```bash
-# Clonar repositorio
-git clone https://github.com/HarryLexvb/VideoEdition.git
-cd VideoEdition
-
-# Instalar dependencias
 npm install
-
-# Iniciar desarrollo
 npm run dev
 ```
 
-Accede en: `http://localhost:5173`
+Abre: http://localhost:5173
 
-## 📖 Guía de Uso
+### Opcion B: Frontend + Backend En Local (Sin Docker Para Web)
 
-### 1️⃣ Cargar Video
-
-1. Click en **"Cargar Video"** (botón con gradiente en la esquina superior derecha)
-2. En el modal:
-   - **Arrastra** un video al área gris
-   - **O haz click** en el área gris para abrir el selector de archivos
-3. **Formatos:** MP4 (H.264/AAC), WebM, MOV
-4. **Máximo:** 2GB
-
-### 2️⃣ Visualizar
-
-- El **preview** aparece arriba con controles de reproducción
-- El **timeline con waveform** se genera automáticamente debajo
-- Espera unos segundos mientras carga los metadatos
-
-### 3️⃣ Recortar Video (Trim) ⭐ NUEVO
-
-**Panel de Recorte (sidebar derecho):**
-- **Marcar Inicio:** Posiciona el cabezal y haz click en "Marcar Inicio"
-- **Marcar Fin:** Mueve el cabezal al punto final y haz click en "Marcar Fin"
-- **Ajuste Visual:** Arrastra los bordes de la región azul en el timeline para redimensionar
-- **Limpiar:** Botón "Limpiar" para resetear la selección
-- **Visualización:** El panel muestra inicio, fin y duración del rango seleccionado
-
-**Notas:**
-- La región de trim aparece como una banda azul semi-transparente
-- Los handles en los bordes permiten ajuste preciso
-- El historial (Ctrl+Z) captura cambios de trim
-
-### 4️⃣ Editar Segmentos
-
-- **Cortar:** Click en "Cortar en cabezal" para dividir en el punto actual
-- **Navegar:** Click en el timeline para mover el playhead
-- **Reproducir:** Usa los controles del player
-
-### 5️⃣ Gestionar Segmentos
-
-**Panel lateral derecho:**
-- Ver lista de segmentos creados
-- Click en segmento para seleccionar
-- Marcar como:
-  - 🟢 **Keep** (verde) - Conservar
-  - 🔴 **Remove** (rojo) - Eliminar
-- **Undo/Redo:** Ctrl+Z / Ctrl+Shift+Z
-
-### 6️⃣ Exportar (⚠️ No Funcional)
-
-Los botones "Exportar" y "Extraer audio" preparan la configuración (incluyendo trim range y segmentos) pero **NO procesan el video** porque no hay backend implementado.
-
-**Payload generado incluye:**
-- Source (archivo, tamaño, tipo)
-- Timeline (segmentos con disposición keep/remove)
-- **Trim Range** (inicio, fin, duración) ⭐ NUEVO
-- Metadata (duración total, contadores)
-
-## 🏗️ Estructura del Proyecto
-
-```
-VideoEdition/
-├── src/
-│   ├── features/
-│   │   └── editor/
-│   │       ├── api/              # Hooks API (preparados para backend)
-│   │       ├── components/        # Componentes del editor
-│   │       │   ├── VideoPlayer.tsx
-│   │       │   ├── TimelinePanel.tsx
-│   │       │   ├── TrimControls.tsx    # ⭐ NUEVO - Panel de recorte
-│   │       │   ├── SidebarPanel.tsx
-│   │       │   └── HeaderBar.tsx
-│   │       ├── hooks/            # useVideoUpload
-│   │       ├── model/            # Types y lógica de negocio
-│   │       ├── pages/            # EditorPage
-│   │       └── store/            # Zustand store
-│   ├── shared/
-│   │   ├── components/           # Button, StatusBadge, ThemeToggle
-│   │   ├── contexts/             # ThemeContext
-│   │   └── lib/                  # Utilidades (formatTime, id)
-│   ├── router/                   # AppRouter
-│   └── styles/                   # global.css
-├── public/
-├── PROJECT_FIX_PLAN.md        # ⭐ Plan de corrección técnica
-└── index.html
-```
-
-## 🐛 Troubleshooting
-
-### El video no carga
-
-**Síntomas:** No aparece preview ni timeline
-
-**Soluciones:**
-1. Usa MP4 H.264/AAC (mayor compatibilidad)
-2. Abre DevTools (F12) → Console
-3. Busca logs con `[VideoPlayer]` o `[TimelinePanel]`
-
-**Logs esperados (éxito):**
-```
-[EditorPage] Video seleccionado: video.mp4 URL creada: blob:...
-[VideoPlayer] 🎬 Cargando video: video.mp4
-[VideoPlayer] ✓ loadedmetadata - Duración: 120.5 segundos
-[TimelinePanel] ✓ Inicializando WaveSurfer
-[TimelinePanel] ✓ WaveSurfer creado exitosamente
-```
-
-### El área de carga no funciona
-
-**Solución:**
-- El área **gris/azul** en el centro del modal ES clickeable
-- Haz click directamente en el área de drop zone
-- O arrastra el archivo sobre ella
-
-### Timeline no aparece
-
-**Causas:**
-- Video aún cargando metadatos (espera unos segundos)
-- Formato incompatible
-- Video corrupto
-
-**Verifica:**
-- Footer muestra "Media: conectado"
-- Console muestra logs de WaveSurfer
-- Prueba con otro video más pequeño
-
-### Región de trim no aparece ⭐ NUEVO
-
-**Solución:**
-- Debes marcar tanto inicio como fin para que aparezca la región azul
-- Si solo marcas uno, el panel mostrará el valor pero no habrá región visual
-- Usa "Limpiar" para resetear y volver a intentar
-
-### Formatos Soportados
-
-**✅ Recomendados:**
-- MP4 (H.264 + AAC)
-- WebM (VP8/VP9 + Vorbis/Opus)
-
-**⚠️ Pueden fallar:**
-- AVI (depende del codec)
-- MKV (no nativo en navegador)
-- Videos 4K+ (carga muy lenta)
-- Códecs exóticos
-
-## 📦 Scripts
+1. Instala dependencias:
 
 ```bash
-npm run dev         # Desarrollo (puerto 5173)
-npm run build       # Producción
-npm run preview     # Preview del build
-npm run typecheck   # Verificar tipos TS
+npm install
+cd apps/api
+npm install
 ```
 
-## ⚙️ Variables de Entorno
+2. Configura entorno frontend (.env en la raiz):
 
 ```bash
-# .env (opcional)
-VITE_TUS_ENDPOINT=http://localhost:3000/upload/tus
+VITE_API_BASE_URL=http://localhost:3000
+VITE_TUS_ENDPOINT=http://localhost:1080/files/
 ```
 
-Si defines esto, habilita upload reanudable vía Tus (requiere backend).
+3. Levanta servicios:
 
-## 🎨 Características UI
+```bash
+# Terminal 1 (frontend)
+npm run dev
 
-- Gradientes modernos y sombras suaves
-- Animación shimmer en botón principal
-- Transiciones fluidas (300ms)
-- Dark mode completo
-- Responsive (desktop y tablets)
-- ARIA labels para accesibilidad
+# Terminal 2 (backend)
+cd apps/api
+npm run dev
+```
 
-## ⚠️ IMPORTANTE - Leer Antes de Usar
+4. Levanta tusd por Docker (recomendado para pruebas de upload reanudable):
 
-### Este es un Editor Frontend Únicamente
+```bash
+docker compose up tusd -d
+```
 
-**Lo que SÍ hace:**
-- ✅ Cargar y reproducir videos localmente
-- ✅ Visualizar waveform
-- ✅ **Recortar video seleccionando rango inicio/fin** ⭐ NUEVO
-- ✅ Crear y marcar segmentos
-- ✅ Gestionar historial de cambios
+### Opcion C: Stack Contenerizado (Docker Compose)
 
-**Lo que NO hace:**
-- ❌ NO exporta video procesado
-- ❌ NO extrae audio real
-- ❌ NO guarda proyectos
-- ❌ NO procesa video con FFmpeg
+```bash
+docker compose up --build
+```
 
-Los botones de exportar/extraer audio están visibles pero **no funcionan** sin implementar backend.
+Servicios:
+- Web (Nginx): http://localhost
+- API directa: http://localhost:3000
+- tusd directo: http://localhost:1080/files/
 
-## 🚀 Roadmap Futuro
+Si quieres que el frontend del contenedor web use rutas proxied de Nginx, define antes del build:
 
-**Fase 1 - Backend:**
-- [ ] API REST (Express/Fastify)
-- [ ] Jobs (BullMQ)
-- [ ] Procesamiento (FFmpeg)
-- [ ] Storage (S3/R2)
+```bash
+VITE_API_BASE_URL=http://localhost/api
+VITE_TUS_ENDPOINT=http://localhost/files/
+```
 
-**Fase 2 - Funcionalidades:**
-- [ ] Export funcional
-- [ ] Extracción de audio real
-- [ ] Múltiples pistas
-- [ ] Transiciones
-- [ ] Efectos y filtros
+Nota: las variables VITE_* se inyectan en build time de Vite. Si cambian, reconstruye la imagen web.
 
-## 🤝 Contribuir
+## Variables De Entorno
 
-1. Fork el proyecto
-2. Crea tu rama (`git checkout -b feature/nueva-funcionalidad`)
-3. Commit (`git commit -m 'feat: agregar funcionalidad'`)
-4. Push (`git push origin feature/nueva-funcionalidad`)
-5. Abre un Pull Request
+### Frontend (raiz)
 
-## 📄 Licencia
+Ver .env.example:
+- VITE_API_BASE_URL: base URL para jobs y polling
+- VITE_TUS_ENDPOINT: endpoint Tus para uploads reanudables
 
-MIT License
+### Backend (apps/api)
 
-## 👤 Autor
+Ver apps/api/.env.example:
+- PORT, HOST
+- UPLOADS_DIR, RESULTS_DIR, TEMP_DIR
+- FFMPEG_PATH, FFPROBE_PATH
+- CORS_ORIGIN
+- PUBLIC_API_URL (usada para construir resultUrl absoluto)
 
-**Harold Alejandro Villanueva Borda**
+## Scripts
 
-- GitHub: [@HarryLexvb](https://github.com/HarryLexvb)
-- Email: harrylex8@gmail.com
-- Email institucional: harold.villanueva@gmail.com
+### Raiz (frontend)
 
-## 🔗 Enlaces
+```bash
+npm run dev
+npm run dev:open
+npm run typecheck
+npm run build
+npm run preview
+```
 
-- **Repositorio:** https://github.com/HarryLexvb/VideoEdition
-- **Issues:** https://github.com/HarryLexvb/VideoEdition/issues
+### apps/api (backend)
 
-## 🙏 Tecnologías Utilizadas
+```bash
+npm run dev
+npm run build
+npm run start
+```
 
-- **Uppy** - Upload modular y robusto
-- **Plyr** - Reproductor HTML5 elegante
-- **WaveSurfer.js** - Visualización de audio/video
-- **Zustand** - Estado simple y potente
-- **Lucide** - Íconos SVG modernos
-- **Tailwind CSS** - Utility-first CSS
-- **Vite** - Build tool ultrarrápido
+## Contrato API
 
----
+Documentacion actualizada del contrato en docs/contracts/api.md
 
-**Versión:** 0.6.0  
-**Última actualización:** 03 de Abril, 2026  
-**Estado:** Frontend completo (90% plan corregido) | Backend pendiente
+## Validacion Operativa Reciente
 
----
+Validacion ejecutada en local el 2026-04-04 con video real provisto por el usuario:
+- Fuente: video MP4 local de 174415760 bytes.
+- API: GET /health respondio 200 correctamente.
+- Procesamiento: POST /jobs/export completo con estado completed.
+- Procesamiento: POST /jobs/extract-audio completo con estado completed.
+- Descarga de resultados verificada:
+  - Export MP4 descargado (~1216461 bytes).
+  - Audio MP3 descargado (~3443182 bytes).
 
-## 📝 Notas de Desarrollo
+## Estado Documental
 
-### Problemas Resueltos
+Este README fue corregido tras auditoria de codigo para mantener consistencia con el estado tecnico real del repositorio.
 
-✅ Video flickering al cargar  
-✅ Timeline no renderiza  
-✅ Área de carga sin respuesta al click  
-✅ Callbacks inestables causando re-renders  
-✅ Object URLs sin cleanup  
-✅ Caracteres especiales mal codificados (UTF-8)  
-✅ Falta de funcionalidad de trim/recorte de video  
-✅ Historial no capturaba trim range  
-✅ Regions de timeline no redimensionables  
-✅ Threshold de sincronización alto (180ms → 50ms)  
-✅ EPSILON demasiado alto (20ms → 1ms)  
-✅ Mensaje UI engañoso corregido  
-✅ Validación de tamaño duplicada eliminada  
-✅ formatTime ahora soporta milisegundos opcionales  
-✅ Sección backend condicionalizada (solo si hay API)
+## Licencia
 
-### Cambios Recientes (v0.5.0)
-
-- ⭐ **NUEVO:** Funcionalidad completa de trim/recorte de video
-- ⭐ **NUEVO:** Componente TrimControls con botones "Marcar Inicio/Fin"
-- ⭐ **NUEVO:** Región de trim azul redimensionable en timeline
-- ✅ Historial (undo/redo) ahora captura trim range
-- ✅ Payload de exportación incluye trimRange con metadata
-- ✅ Store extendido con 7 acciones de trim
-- ✅ **Optimización:** Threshold de sincronización reducido 180ms → 50ms (3.6x más preciso)
-- ✅ **Optimización:** EPSILON reducido 20ms → 1ms (20x más preciso en cortes)
-- ✅ **Corrección:** Mensaje UI actualizado para mayor claridad
-- ✅ **Limpieza:** Validación duplicada eliminada (DRY)
-- ✅ **Feature:** formatTime con soporte opcional de milisegundos
-- ✅ **Mejora:** Sección backend solo visible con API configurada
-- ✅ TypeCheck y Build validados exitosamente
-- 🎉 **Plan de corrección completado al 90% (9/10 problemas resueltos)**
-- 📝 Documentación actualizada con estado real del proyecto
-
----
-
-**⚠️ RECORDATORIO FINAL**
-
-Este proyecto es un **editor de video no destructivo frontend**. La funcionalidad de procesamiento real (exportar, extraer audio) requiere implementar un backend con FFmpeg. El estado actual permite visualizar, segmentar, **recortar (trim)**, y preparar la configuración de edición completa para enviar a un backend futuro.
+MIT
