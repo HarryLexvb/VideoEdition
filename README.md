@@ -305,9 +305,9 @@ MIT License
 
 ---
 
-**Versión:** 0.5.0  
+**Versión:** 0.6.0  
 **Última actualización:** 03 de Abril, 2026  
-**Estado:** Frontend completo con trim/recorte | Backend pendiente
+**Estado:** Frontend completo (90% plan corregido) | Backend pendiente
 
 ---
 
@@ -327,7 +327,9 @@ MIT License
 ✅ Threshold de sincronización alto (180ms → 50ms)  
 ✅ EPSILON demasiado alto (20ms → 1ms)  
 ✅ Mensaje UI engañoso corregido  
-✅ Validación de tamaño duplicada eliminada
+✅ Validación de tamaño duplicada eliminada  
+✅ formatTime ahora soporta milisegundos opcionales  
+✅ Sección backend condicionalizada (solo si hay API)
 
 ### Cambios Recientes (v0.5.0)
 
@@ -341,7 +343,10 @@ MIT License
 - ✅ **Optimización:** EPSILON reducido 20ms → 1ms (20x más preciso en cortes)
 - ✅ **Corrección:** Mensaje UI actualizado para mayor claridad
 - ✅ **Limpieza:** Validación duplicada eliminada (DRY)
+- ✅ **Feature:** formatTime con soporte opcional de milisegundos
+- ✅ **Mejora:** Sección backend solo visible con API configurada
 - ✅ TypeCheck y Build validados exitosamente
+- 🎉 **Plan de corrección completado al 90% (9/10 problemas resueltos)**
 - 📝 Documentación actualizada con estado real del proyecto
 
 ---

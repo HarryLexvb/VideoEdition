@@ -159,31 +159,33 @@ export function HeaderBar({
           {!isTusEnabled ? <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">Define VITE_TUS_ENDPOINT para activar envio resumable.</p> : null}
         </section>
 
-        <section className="rounded-2xl border border-slate-200/80 bg-white/80 p-4 dark:border-slate-700/50 dark:bg-slate-800/70">
-          <div className="flex items-center justify-between gap-3">
-            <h2 className="text-sm font-semibold text-slate-800 dark:text-slate-200">Procesamiento backend</h2>
-            {activeJob ? (
-              <StatusBadge tone={getProcessingTone(activeJob.status)}>{activeJob.status}</StatusBadge>
-            ) : (
-              <StatusBadge>Sin tarea</StatusBadge>
-            )}
-          </div>
-          {activeJob ? (
-            <div className="mt-3 text-sm text-slate-600 dark:text-slate-400">
-              <p>ID: {activeJob.jobId}</p>
-              {typeof activeJob.progress === 'number' ? <p>Progreso: {Math.round(activeJob.progress)}%</p> : null}
-              {activeJob.message ? <p>{activeJob.message}</p> : null}
-              {activeJob.status === 'queued' || activeJob.status === 'processing' ? (
-                <p className="mt-2 inline-flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
-                  Polling activo
-                </p>
-              ) : null}
+        {import.meta.env.VITE_API_BASE_URL ? (
+          <section className="rounded-2xl border border-slate-200/80 bg-white/80 p-4 dark:border-slate-700/50 dark:bg-slate-800/70">
+            <div className="flex items-center justify-between gap-3">
+              <h2 className="text-sm font-semibold text-slate-800 dark:text-slate-200">Procesamiento backend</h2>
+              {activeJob ? (
+                <StatusBadge tone={getProcessingTone(activeJob.status)}>{activeJob.status}</StatusBadge>
+              ) : (
+                <StatusBadge>Sin tarea</StatusBadge>
+              )}
             </div>
-          ) : (
-            <p className="mt-3 text-sm text-slate-500 dark:text-slate-400">Lanza exportacion o extraccion para iniciar una tarea.</p>
-          )}
-        </section>
+            {activeJob ? (
+              <div className="mt-3 text-sm text-slate-600 dark:text-slate-400">
+                <p>ID: {activeJob.jobId}</p>
+                {typeof activeJob.progress === 'number' ? <p>Progreso: {Math.round(activeJob.progress)}%</p> : null}
+                {activeJob.message ? <p>{activeJob.message}</p> : null}
+                {activeJob.status === 'queued' || activeJob.status === 'processing' ? (
+                  <p className="mt-2 inline-flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+                    Polling activo
+                  </p>
+                ) : null}
+              </div>
+            ) : (
+              <p className="mt-3 text-sm text-slate-500 dark:text-slate-400">Lanza exportacion o extraccion para iniciar una tarea.</p>
+            )}
+          </section>
+        ) : null}
       </div>
     </header>
   );
