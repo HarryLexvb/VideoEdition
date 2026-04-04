@@ -2,188 +2,215 @@
 
 Editor de video no destructivo con frontend React y backend Fastify para procesamiento con FFmpeg.
 
-## Estado Real Del Proyecto (Auditoria 2026-04-04)
+## Estado Actual (Verificado)
 
-Veredicto tecnico: el repositorio SI tiene backend.
+Fecha de corte: 2026-04-04
 
-Clasificacion actual:
-- Frontend: funcional para carga, preview, timeline, segmentos, trim e historial.
-- Backend: parcial pero operativo (MVP), con API y procesamiento real de jobs.
-- Produccion endurecida: pendiente (sin autenticacion, sin cola persistente, sin base de datos, sin validacion de schema en runtime).
+Clasificacion tecnica real:
+- Frontend: funcional para carga, preview, timeline, trim, segmentos e historial.
+- Backend: parcial operativo (MVP), con API real, jobs y salida de archivos.
+- Infra de upload: funcional con Tus (`tusd`) cuando `api` y `tusd` corren en la misma red Docker.
 
-## Evidencia Tecnica Del Backend
+No es correcto describir este repo como frontend-only.
 
-Componentes de backend detectados y verificados en codigo:
-- Servidor HTTP Fastify en apps/api/src/server.ts
-- Rutas API en apps/api/src/routes/jobs.ts, apps/api/src/routes/results.ts, apps/api/src/routes/hooks.ts
-- Logica de procesamiento FFmpeg en apps/api/src/services/ffmpeg.ts
-- Almacenamiento local (uploads/results/temp) en apps/api/src/storage/local.ts
-- Job store en memoria en apps/api/src/services/jobStore.ts
-- Configuracion por variables de entorno en apps/api/src/config.ts
-- Contenedores y orquestacion en docker-compose.yml y apps/api/Dockerfile
-- Integracion frontend -> backend en src/features/editor/api/client.ts y src/features/editor/api/hooks.ts
+## Resumen Ejecutivo Para El Equipo
 
-## Arquitectura Actual
+Logros confirmados:
+- Flujo completo de upload + export + extract-audio funcional.
+- Contrato frontend/backend operativo en endpoints de jobs.
+- Descarga de resultados validada (`/results/:filename`).
+- Problemas criticos recientes de ejecucion corregidos.
+
+Situacion productiva:
+- Proyecto usable para demo tecnica y pruebas de flujo.
+- Aun no listo para produccion (sin auth, sin DB, sin cola persistente, sin endurecimiento).
+
+## Arquitectura Real Del Repositorio
 
 ### Frontend
-- React + Vite + TypeScript
-- Editor visual (player, timeline, trim, segmentos)
-- Construye payload de job en src/features/editor/model/projectPayload.ts
-- Lanza jobs y hace polling de estado via API
+- React + Vite + TypeScript.
+- Estado local con Zustand.
+- Integracion API con React Query.
+- Upload con Uppy + Tus opcional.
 
-### Backend (MVP)
-- Fastify con CORS
-- Endpoints:
-  - GET /health
-  - POST /jobs/export
-  - POST /jobs/extract-audio
-  - GET /jobs/:jobId
-  - GET /results/:filename
-  - POST /hooks/upload
-- Procesa exportacion y extraccion de audio con FFmpeg
-- Retorna resultUrl para descarga
+### Backend
+- Fastify (`apps/api/src/server.ts`).
+- Rutas:
+  - `GET /health`
+  - `POST /jobs/export`
+  - `POST /jobs/extract-audio`
+  - `GET /jobs/:jobId`
+  - `GET /results/:filename`
+  - `POST /hooks/upload`
+- Procesamiento con FFmpeg (`apps/api/src/services/ffmpeg.ts`).
+- Storage local (`uploads`, `results`, `temp`).
+- Job store en memoria (`apps/api/src/services/jobStore.ts`).
 
-### Upload Reanudable
-- Soporte Tus en frontend via Uppy
-- Servicio tusd en docker-compose.yml
-- Hook de finalizacion en POST /hooks/upload
+### Infra Upload
+- `tusd` en Docker Compose.
+- Hook configurado a `http://api:3000/hooks/upload`.
+- Implicacion: para upload reanudable funcional, `api` y `tusd` deben convivir en la red de Compose.
 
-## Lo Que Si Hace Hoy
+## Incidentes Recientes Resueltos
 
-- Cargar video localmente
-- Mostrar preview y waveform
-- Definir segmentos keep/remove
-- Definir trim range visual
-- Enviar jobs al backend (si VITE_API_BASE_URL esta configurado)
-- Consultar estado de jobs por polling
-- Descargar resultados desde /results/:filename
+### 1) Upload completaba mal y faltaba `source.uploadId`
+Sintoma:
+- UI mostraba errores como `El campo source.uploadId es requerido` al exportar/extract.
 
-## Limitaciones Reales (Sin Sobreestimar)
+Causa raiz:
+- `tusd` corria en Docker, `api` corria local.
+- Hook de `tusd` apuntaba a `http://api:3000/hooks/upload` (host no resolvible fuera de red Docker).
 
-- Job store en memoria (se pierde al reiniciar el backend)
-- Sin autenticacion/autorizacion
-- Sin base de datos
-- Sin cola distribuida (BullMQ/Redis no implementado)
-- Sin validacion estricta de schema de payload en runtime
-- Escalabilidad limitada por procesamiento en el mismo proceso del API
+Correccion aplicada:
+- Ejecucion recomendada: frontend local + `docker compose up -d api tusd`.
+- Guard en frontend para bloquear envio de jobs si no existe `uploadId`.
 
-## Ejecucion
+Estado:
+- Resuelto y validado.
 
-### Opcion A: Frontend Solamente
+### 2) Preview y timeline quedaban en gris/estaticos
+Sintoma:
+- Video subia, pero no reproducia en preview y timeline no reaccionaba.
 
-Util para UI/UX sin procesamiento real.
+Causa raiz:
+- Inicializacion inestable del preview y falta de reinicializacion consistente del timeline por cambio de source.
+
+Correccion aplicada:
+- Flujo de preview estabilizado con `video` nativo.
+- Timeline reinicializado por URL de media activa.
+
+Estado:
+- Resuelto y validado.
+
+## Validacion Tecnica Ejecutada
+
+Validaciones reales realizadas el 2026-04-04:
+- `npm run typecheck` (frontend): OK.
+- `npm run build` en `apps/api`: OK.
+- `GET /health`: 200 OK.
+- Upload Tus minimo de prueba: creacion y patch OK.
+- Hooks `tusd -> api`: eventos recibidos en `/hooks/upload`.
+- E2E con video real del usuario:
+  - Export job: `completed` + descarga MP4.
+  - Extract-audio job: `completed` + descarga MP3.
+
+## Como Ejecutar Correctamente
+
+### Opcion A - Solo Frontend
+
+Uso: UI/UX sin procesamiento real backend.
 
 ```bash
 npm install
 npm run dev
 ```
 
-Abre: http://localhost:5173
+URL: `http://localhost:5173`
 
-### Opcion B: Frontend Local + API/Tusd En Docker (Recomendada)
+### Opcion B - Recomendada Para Flujo Completo Local
 
-1. Instala dependencias:
+Frontend local + API/Tusd en Docker.
+
+1. Instalar frontend:
 
 ```bash
 npm install
 ```
 
-2. Configura entorno frontend (.env en la raiz):
+2. Configurar `.env` en raiz:
 
 ```bash
 VITE_API_BASE_URL=http://localhost:3000
 VITE_TUS_ENDPOINT=http://localhost:1080/files/
 ```
 
-3. Levanta servicios:
+3. Levantar servicios:
 
 ```bash
-# Terminal 1 (frontend)
+# Terminal 1
 npm run dev
 
-# Terminal 2 (backend + tusd)
+# Terminal 2
 docker compose up -d api tusd
 ```
 
-Nota importante:
-- El `docker-compose.yml` configura tusd con hook `http://api:3000/hooks/upload`.
-- Por eso, para upload reanudable funcional, `api` y `tusd` deben correr juntos en la misma red Docker.
-
-### Opcion C: Stack Contenerizado (Docker Compose)
+### Opcion C - Stack Completo Docker
 
 ```bash
 docker compose up --build
 ```
 
 Servicios:
-- Web (Nginx): http://localhost
-- API directa: http://localhost:3000
-- tusd directo: http://localhost:1080/files/
-
-Si quieres que el frontend del contenedor web use rutas proxied de Nginx, define antes del build:
-
-```bash
-VITE_API_BASE_URL=http://localhost/api
-VITE_TUS_ENDPOINT=http://localhost/files/
-```
-
-Nota: las variables VITE_* se inyectan en build time de Vite. Si cambian, reconstruye la imagen web.
+- Web: `http://localhost`
+- API: `http://localhost:3000`
+- Tusd: `http://localhost:1080/files/`
 
 ## Variables De Entorno
 
 ### Frontend (raiz)
+- `VITE_API_BASE_URL`
+- `VITE_TUS_ENDPOINT`
 
-Ver .env.example:
-- VITE_API_BASE_URL: base URL para jobs y polling
-- VITE_TUS_ENDPOINT: endpoint Tus para uploads reanudables
+Referencia: `.env.example`
 
-### Backend (apps/api)
+### Backend (`apps/api`)
+- `PORT`, `HOST`
+- `UPLOADS_DIR`, `RESULTS_DIR`, `TEMP_DIR`
+- `FFMPEG_PATH`, `FFPROBE_PATH`
+- `CORS_ORIGIN`
+- `PUBLIC_API_URL`
 
-Ver apps/api/.env.example:
-- PORT, HOST
-- UPLOADS_DIR, RESULTS_DIR, TEMP_DIR
-- FFMPEG_PATH, FFPROBE_PATH
-- CORS_ORIGIN
-- PUBLIC_API_URL (usada para construir resultUrl absoluto)
+Referencia: `apps/api/.env.example`
 
 ## Scripts
 
-### Raiz (frontend)
+Raiz:
+- `npm run dev`
+- `npm run dev:open`
+- `npm run typecheck`
+- `npm run build`
+- `npm run preview`
 
-```bash
-npm run dev
-npm run dev:open
-npm run typecheck
-npm run build
-npm run preview
-```
+`apps/api`:
+- `npm run dev`
+- `npm run build`
+- `npm run start`
 
-### apps/api (backend)
+## Estado Funcional (Que Ya Hace)
 
-```bash
-npm run dev
-npm run build
-npm run start
-```
+Implementado:
+- Carga de video local.
+- Upload reanudable Tus.
+- Preview de video.
+- Timeline y segmentos keep/remove.
+- Trim range visual y acciones de historial.
+- Creacion de jobs backend.
+- Polling de estado de jobs.
+- Descarga de resultados procesados.
 
-## Contrato API
+## Deuda Tecnica Y Faltantes
 
-Documentacion actualizada del contrato en docs/contracts/api.md
+Pendiente para siguiente fase:
+- Autenticacion/autorizacion.
+- Persistencia real de jobs (hoy en memoria).
+- Base de datos para proyectos/historial.
+- Cola de trabajo (BullMQ + Redis) para robustez y escalado.
+- Validacion de schema en runtime para payloads.
+- Timeout y politicas de reintento de polling en frontend.
+- Endurecimiento de seguridad y observabilidad.
 
-## Validacion Operativa Reciente
+## Prioridad Recomendada (Proxima Iteracion)
 
-Validacion ejecutada en local el 2026-04-04 con video real provisto por el usuario:
-- Fuente: video MP4 local de 174415760 bytes.
-- API: GET /health respondio 200 correctamente.
-- Procesamiento: POST /jobs/export completo con estado completed.
-- Procesamiento: POST /jobs/extract-audio completo con estado completed.
-- Descarga de resultados verificada:
-  - Export MP4 descargado (~1216461 bytes).
-  - Audio MP3 descargado (~3443182 bytes).
+1. Implementar timeout de polling y UX de reintento.
+2. Migrar job store en memoria a cola persistente.
+3. Agregar validacion de payloads en backend.
+4. Agregar persistencia de metadata de jobs/resultados.
+5. Agregar autenticacion minima para endpoints de procesamiento.
 
-## Estado Documental
+## Documentacion Relacionada
 
-Este README fue corregido tras auditoria de codigo para mantener consistencia con el estado tecnico real del repositorio.
+- Contrato API: `docs/contracts/api.md`
+- Plan y registro de correcciones: `PROJECT_FIX_PLAN.md`
 
 ## Licencia
 

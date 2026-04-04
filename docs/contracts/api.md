@@ -1,47 +1,50 @@
-# Contrato API - VideoEdition
+# API Contract - VideoEdition
 
-Version: 1.1 (alineada al codigo actual)
+Version: 1.2  
+Estado: activo, alineado al codigo y a pruebas reales (2026-04-04)
 
-Estado del backend: parcial operativo (MVP).
+## Contexto De Arquitectura
 
-## Base URL
+Backend implementado en `apps/api` (Fastify + FFmpeg).
 
-Hay dos formas de consumir la API:
+Integracion de upload reanudable:
+- `tusd` usa hook HTTP hacia `POST /hooks/upload`.
+- En `docker-compose.yml`, el hook apunta a `http://api:3000/hooks/upload`.
+- Por lo tanto, para upload Tus funcional, `api` y `tusd` deben correr en la misma red Docker.
 
-1. Directa al contenedor/proceso API:
+## Base URLs
+
+Consumo directo de API:
 
 ```text
 http://localhost:3000
 ```
 
-2. Via Nginx (cuando web corre en Docker Compose):
+Consumo via proxy Nginx (stack web docker):
 
 ```text
 http://localhost/api
 ```
 
-Nota: en Nginx existe proxy /api/ -> api:3000/.
+## Tus Endpoint
 
-## Upload (Tus)
-
-Endpoints validos segun despliegue:
+Directo:
 
 ```text
-http://localhost:1080/files/   (tusd directo)
-http://localhost/files/        (via Nginx)
+http://localhost:1080/files/
 ```
 
-Al finalizar upload, tusd notifica:
+Via Nginx:
 
 ```text
-POST /hooks/upload
+http://localhost/files/
 ```
 
 ## Endpoints
 
 ### GET /health
 
-Health check del backend.
+Devuelve salud del proceso API.
 
 Response 200:
 
@@ -54,7 +57,7 @@ Response 200:
 
 ### POST /jobs/export
 
-Encola y procesa un job de exportacion de video.
+Encola un job de export de video.
 
 Body minimo requerido:
 
@@ -67,18 +70,19 @@ Body minimo requerido:
     "uploadId": "abc123"
   },
   "timeline": [
-    { "id": "seg-1", "start": 0, "end": 10.5, "disposition": "keep" },
-    { "id": "seg-2", "start": 10.5, "end": 18.2, "disposition": "remove" }
+    { "id": "seg-1", "start": 0, "end": 10.5, "disposition": "keep" }
   ],
   "meta": {
-    "duration": 18.2,
+    "duration": 10.5,
     "keepSegmentCount": 1,
-    "removeSegmentCount": 1
+    "removeSegmentCount": 0
   }
 }
 ```
 
-Campos adicionales enviados por frontend (por ejemplo trimRange, hasTrimRange, trimDuration) hoy son aceptados pero no son usados por la logica de backend actual.
+Notas:
+- `source.uploadId` es obligatorio.
+- El frontend puede enviar campos extra (`trimRange`, `hasTrimRange`, etc.); hoy no son usados por el backend.
 
 Response 202:
 
@@ -100,7 +104,8 @@ Response 400:
 
 ### POST /jobs/extract-audio
 
-Mismo contrato de entrada que /jobs/export. Genera salida MP3.
+Mismo contrato de entrada que `POST /jobs/export`.
+Salida final esperada: MP3.
 
 Response 202:
 
@@ -114,7 +119,7 @@ Response 202:
 
 ### GET /jobs/:jobId
 
-Consulta de estado para polling desde frontend.
+Consulta estado del job para polling.
 
 Response 200 (processing):
 
@@ -143,7 +148,7 @@ Response 200 (failed):
 {
   "jobId": "550e8400-e29b-41d4-a716-446655440000",
   "status": "failed",
-  "error": "No hay segmentos marcados para conservar"
+  "error": "Archivo no encontrado para uploadId: abc123"
 }
 ```
 
@@ -157,19 +162,27 @@ Response 404:
 
 ### GET /results/:filename
 
-Entrega el archivo procesado desde RESULTS_DIR.
+Descarga de artefacto generado.
 
-Headers esperados:
-- Content-Type: video/mp4, audio/mpeg, etc.
-- Content-Disposition: attachment; filename="..."
-- Content-Length: tamano del archivo
+Headers:
+- `Content-Type`
+- `Content-Disposition`
+- `Content-Length`
 
-Seguridad implementada:
-- Sanitizacion de filename via path.basename para evitar path traversal.
+Seguridad actual:
+- Sanitizacion de `filename` con `path.basename` para evitar path traversal.
+
+Response 404:
+
+```json
+{
+  "error": "Archivo no encontrado"
+}
+```
 
 ### POST /hooks/upload
 
-Endpoint de hook para tusd (actualmente loguea el evento y responde ok).
+Endpoint de hook para eventos de Tusd.
 
 Response 200:
 
@@ -179,42 +192,49 @@ Response 200:
 }
 ```
 
-## Estados de Job
+## Estados De Job
 
-- queued
-- processing
-- completed
-- failed
+- `queued`
+- `processing`
+- `completed`
+- `failed`
 
-## Alcance Real Del MVP
+## Catalogo De Errores Operativos Observados
 
-Implementado:
-- API Fastify funcional
-- Procesamiento FFmpeg para export y extract-audio
-- Descarga de resultados
-- Integracion con uploads Tus por uploadId
+Errores API:
+- 400 por falta de `source.uploadId`.
+- 404 por job inexistente.
+- 404 por resultado inexistente.
 
-No implementado todavia:
-- Autenticacion y autorizacion
-- Base de datos
-- Cola persistente de jobs (BullMQ/Redis)
-- Validacion de schema en runtime
-- Rate limiting y politicas de seguridad avanzadas
+Errores de infraestructura (no API de jobs):
+- `tusd` puede responder 500 en `pre-create` si no resuelve `http://api:3000/hooks/upload`.
+- Este escenario se evita ejecutando `api` + `tusd` juntos en Compose.
 
-## Validacion E2E Ejecutada
+## Verificacion E2E Real Ejecutada
 
-Validacion local ejecutada el 2026-04-04 con un video real:
-- GET /health: 200 OK.
-- POST /jobs/export: job encolado y completado, con descarga de MP4 valida.
-- POST /jobs/extract-audio: job encolado y completado, con descarga de MP3 valida.
-- GET /results/:filename: entrega correcta de archivos generados.
+Fecha: 2026-04-04
+
+Resultados:
+- `GET /health`: OK.
+- `POST /jobs/export` con video real: `completed` + descarga MP4 valida.
+- `POST /jobs/extract-audio` con video real: `completed` + descarga MP3 valida.
+- Hooks de Tusd recibidos por `/hooks/upload`: OK.
+
+## Brechas Pendientes Del Contrato
+
+Pendiente implementar:
+- Validacion de schemas de request en runtime.
+- Versionado formal de API.
+- Contrato de errores uniforme por codigo y categoria.
+- AuthN/AuthZ para endpoints de procesamiento.
+- Persistencia de jobs en DB/cola.
 
 ## Referencias De Codigo
 
-- apps/api/src/server.ts
-- apps/api/src/routes/jobs.ts
-- apps/api/src/routes/results.ts
-- apps/api/src/routes/hooks.ts
-- apps/api/src/services/ffmpeg.ts
-- apps/api/src/services/jobStore.ts
-- apps/api/src/storage/local.ts
+- `apps/api/src/server.ts`
+- `apps/api/src/routes/jobs.ts`
+- `apps/api/src/routes/results.ts`
+- `apps/api/src/routes/hooks.ts`
+- `apps/api/src/services/ffmpeg.ts`
+- `apps/api/src/services/jobStore.ts`
+- `apps/api/src/storage/local.ts`

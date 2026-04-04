@@ -1,549 +1,146 @@
-# 📋 PLAN DE CORRECCIÓN TÉCNICA - VIDEOEDITION
-
-**Proyecto:** VideoCut Studio  
-**Fecha de inicio:** 2026-04-03  
-**Auditor:** Technical Team  
-**Repositorio:** https://github.com/HarryLexvb/VideoEdition/tree/dev
-
----
-
-## 📊 RESUMEN EJECUTIVO
-
-Este documento registra todos los problemas detectados en la auditoría técnica exhaustiva del proyecto, su priorización, soluciones propuestas y estado de implementación.
-
-**Estadísticas:**
-- Total de problemas identificados: 10
-- Críticos: 3
-- Altos: 2
-- Medios: 3
-- Bajos: 2
-
-## ACTUALIZACION DE CONTEXTO ARQUITECTONICO (2026-04-04)
-
-Auditoria forense posterior al plan original:
-- El repositorio SI contiene backend en apps/api (Fastify + rutas + FFmpeg + storage local).
-- La clasificacion tecnica correcta es backend parcial operativo (MVP), no frontend-only.
-- Las referencias de este documento a "backend inexistente" quedan reemplazadas por esta actualizacion.
-
----
-
-## 🔴 PROBLEMAS CRÍTICOS
-
-### PROBLEMA #1: FUNCIONALIDAD DE TRIM/RECORTE NO IMPLEMENTADA
-**Prioridad:** CRÍTICA  
-**Estado:** ✅ RESUELTO  
-**Impacto:** ALTO - Funcionalidad principal del editor ahora implementada
-
-**Descripción:**
-El proyecto no tiene ningún mecanismo para recortar/trim un video especificando un punto de inicio y fin. Solo permite dividir en segmentos discretos mediante "Cortar en cabezal".
-
-**Evidencia:**
-- `EditorSnapshot` interface no tiene campos `trimStart` ni `trimEnd`
-- `useEditorStore` no tiene acciones para gestionar trim range
-- `TimelinePanel.tsx` tiene regions estáticas (`resize: false`, `drag: false`)
-- No existe componente `TrimControls` ni UI para seleccionar rango
-- `projectPayload.ts` no incluye información de trim range en el payload
-
-**Causa Raíz:**
-Sistema diseñado con modelo de "segmentos discretos" en lugar de "rango de trim continuo".
-
-**Archivos Involucrados:**
-- `src/features/editor/model/types.ts`
-- `src/features/editor/store/useEditorStore.ts`
-- `src/features/editor/components/TimelinePanel.tsx`
-- `src/features/editor/components/TrimControls.tsx` (NO EXISTE - debe crearse)
-- `src/features/editor/pages/EditorPage.tsx`
-- `src/features/editor/model/projectPayload.ts`
-
-**Solución Propuesta:**
-1. ✅ Actualizar `EditorSnapshot` interface con `trimStart: number | null` y `trimEnd: number | null`
-2. ⏳ Agregar 7 acciones al store: `setTrimStart`, `setTrimEnd`, `setTrimRange`, `setTrimStartAtPlayhead`, `setTrimEndAtPlayhead`, `clearTrimRange`, `validateTrimRange`
-3. ⏳ Modificar `TimelinePanel` para mostrar región de trim con handles redimensionables
-4. ⏳ Crear componente `TrimControls` con botones "Marcar Inicio/Fin" y visualización de rango
-5. ⏳ Integrar `TrimControls` en `EditorPage`
-6. ⏳ Actualizar `buildEditorJobPayload` para incluir `trimRange` en el payload
-7. ⏳ Actualizar funciones `snapshotFromState` y `cloneSnapshot` para incluir trim fields
-
-**Validación:**
-- [x] Build sin errores TypeScript
-- [x] UI muestra controles de trim
-- [x] Región azul de trim aparece en timeline cuando se marca rango
-- [x] Handles de región son redimensionables
-- [x] Botones "Marcar Inicio/Fin" funcionan correctamente
-- [x] Undo/Redo mantiene estado de trim
-- [x] Payload incluye trimRange al exportar
-
-**Progreso:**
-- [x] 2026-04-03: `types.ts` actualizado con trimStart/trimEnd
-- [x] 2026-04-03: `useEditorStore.ts` con 7 acciones de trim implementadas
-- [x] 2026-04-03: `TrimControls.tsx` componente creado
-- [x] 2026-04-03: `TimelinePanel.tsx` región de trim con resize=true
-- [x] 2026-04-03: `EditorPage.tsx` integración completa
-- [x] 2026-04-03: `projectPayload.ts` incluye trimRange
-- [x] 2026-04-03: TypeCheck exitoso
-- [x] 2026-04-03: Build exitoso
-- [x] 2026-04-03: Commit ba7c45f publicado en origin/dev
-
-**Resolución Final:**
-Funcionalidad completamente implementada y validada. El sistema ahora permite:
-- Seleccionar rango de trim mediante botones "Marcar Inicio/Fin"
-- Redimensionar visualmente la región azul de trim en el timeline
-- Visualizar información de rango (inicio, fin, duración)
-- Limpiar selección de trim
-- Historial (undo/redo) captura correctamente el estado de trim
-- Payload de exportación incluye trimRange con metadata completa
-
----
-
-### PROBLEMA #2: REGIONS DE WAVESURFER ESTÁTICAS
-**Prioridad:** ALTA  
-**Estado:** ✅ RESUELTO PARCIALMENTE  
-**Impacto:** MEDIO - Región de trim ahora es redimensionable
-
-**Descripción:**
-Las regions del timeline tienen `resize: false` y `drag: false`, imposibilitando la interacción visual directa para ajustar segmentos.
-
-**Evidencia:**
-```typescript
-// TimelinePanel.tsx
-regionsPlugin.addRegion({
-  id: segment.id,
-  start: segment.start,
-  end: segment.end,
-  color: getRegionColor(segment, selectedSegmentId),
-  resize: false,  // ❌ No redimensionable
-  drag: false,    // ❌ No arrastrable
-});
-```
-
-**Causa Raíz:**
-Decisión de diseño para evitar edición accidental, pero limita capacidad de edición visual.
-
-**Archivos Involucrados:**
-- `src/features/editor/components/TimelinePanel.tsx` (líneas ~120-130)
-
-**Solución Propuesta:**
-Esta funcionalidad se implementará junto con PROBLEMA #1 al crear la región de trim redimensionable. Los segmentos normales se mantienen estáticos por ahora para evitar conflictos de edición.
-
-**Validación:**
-- [x] Región de trim es redimensionable
-- [x] Segmentos normales se mantienen estáticos (comportamiento actual preservado)
-
-**Notas:**
-Resuelto junto con PROBLEMA #1. La región de trim tiene `resize: true` permitiendo ajuste visual. Los segmentos normales mantienen `resize: false` para evitar ediciones accidentales.
-
----
-
-### PROBLEMA #3: MODELO DE DATOS INCOMPLETO PARA HISTORIAL
-**Prioridad:** ALTA  
-**Estado:** ✅ RESUELTO  
-**Impacto:** MEDIO - Historial ahora captura trim range correctamente
-
-**Descripción:**
-El sistema de historial (undo/redo) no captura el estado de `trimStart` y `trimEnd` porque `snapshotFromState` y `cloneSnapshot` no los incluyen.
-
-**Evidencia:**
-```typescript
-// useEditorStore.ts
-function snapshotFromState(state: EditorStore): EditorSnapshot {
-  return {
-    video: state.video ? { ...state.video } : null,
-    segments: state.segments.map((segment) => ({ ...segment })),
-    selectedSegmentId: state.selectedSegmentId,
-    playheadTime: state.playheadTime,
-    // ❌ FALTA: trimStart, trimEnd
-  };
-}
-```
-
-**Causa Raíz:**
-Funciones de snapshot creadas antes de agregar trim range al modelo.
-
-**Archivos Involucrados:**
-- `src/features/editor/store/useEditorStore.ts` (funciones `snapshotFromState` y `cloneSnapshot`)
-
-**Solución Propuesta:**
-Actualizar ambas funciones para incluir `trimStart` y `trimEnd` en los snapshots.
-
-**Validación:**
-- [x] Undo/Redo restaura correctamente el trim range
-- [x] TypeCheck exitoso confirmando correcta integración
-
-**Notas:**
-Resuelto junto con PROBLEMA #1. Las funciones `snapshotFromState` y `cloneSnapshot` ahora incluyen `trimStart` y `trimEnd`.
-
-**Resolución:**
-- [x] 2026-04-03: Funciones actualizadas en `useEditorStore.ts`
-- [x] 2026-04-03: Validado en build exitoso
-
----
-
-## 🟡 PROBLEMAS DE PRIORIDAD MEDIA
-
-### PROBLEMA #4: THRESHOLD DE SINCRONIZACIÓN ALTO
-**Prioridad:** MEDIA  
-**Estado:** ✅ RESUELTO  
-**Impacto:** MEDIO - Precisión de edición mejorada
-
-**Descripción:**
-El threshold de sincronización entre video y timeline es de 0.18s (180ms), lo cual puede causar desincronizaciones visuales perceptibles en edición de precisión.
-
-**Evidencia:**
-- `VideoPlayer.tsx` línea ~195: `Math.abs(currentTime - requestedTime) > 0.18`
-- `TimelinePanel.tsx` línea ~129: `Math.abs(currentTime - playheadTime) > 0.18`
-
-**Causa Raíz:**
-Valor conservador para evitar seeks innecesarios, pero demasiado alto para edición precisa.
-
-**Archivos Involucrados:**
-- `src/features/editor/components/VideoPlayer.tsx`
-- `src/features/editor/components/TimelinePanel.tsx`
-
-**Solución Propuesta:**
-Reducir threshold a 0.05s (50ms) y extraer como constante compartida:
-```typescript
-const SYNC_THRESHOLD = 0.05; // 50ms
-```
-
-**Implementación:**
-- Creado archivo `src/shared/lib/constants.ts` con constante compartida
-- Actualizado `VideoPlayer.tsx` para usar SYNC_THRESHOLD
-- Actualizado `TimelinePanel.tsx` para usar SYNC_THRESHOLD
-- Mejora consistencia y mantenibilidad del código
-
-**Validación:**
-- [x] Build exitoso
-- [x] Sincronización más precisa (180ms → 50ms)
-- [x] No hay seeks excesivos
-- [x] Constante compartida entre componentes
-
-**Resolución:**
-- [x] 2026-04-03: Constante SYNC_THRESHOLD = 0.05s creada
-- [x] 2026-04-03: VideoPlayer.tsx actualizado
-- [x] 2026-04-03: TimelinePanel.tsx actualizado
-- [x] 2026-04-03: Build validado exitosamente
-
----
-
-### PROBLEMA #5: EPSILON DEMASIADO ALTO EN SEGMENTS.TS
-**Prioridad:** MEDIA  
-**Estado:** ✅ RESUELTO  
-**Impacto:** BAJO - Precisión de cortes mejorada
-
-**Descripción:**
-El valor de EPSILON es 0.02s (20ms), lo cual puede impedir cortes precisos cerca de bordes de segmentos.
-
-**Evidencia:**
-```typescript
-// segments.ts línea 5
-const EPSILON = 0.02;
-```
-
-**Causa Raíz:**
-Valor conservador para evitar problemas de punto flotante, pero puede ser reducido.
-
-**Archivos Involucrados:**
-- `src/features/editor/model/segments.ts`
-
-**Solución Propuesta:**
-Reducir EPSILON a 0.001s (1ms):
-```typescript
-const EPSILON = 0.001; // 1ms
-```
-
-**Implementación:**
-- Actualizado valor de EPSILON en `segments.ts` de 0.02s a 0.001s
-- Agregada documentación JSDoc explicando el propósito
-- Mejora precisión de cortes cerca de bordes de segmentos (20x más preciso)
-
-**Validación:**
-- [x] Build exitoso
-- [x] Cortes funcionan correctamente cerca de bordes
-- [x] No hay errores de punto flotante
-- [x] Precisión mejorada de 20ms a 1ms
-
-**Resolución:**
-- [x] 2026-04-03: EPSILON actualizado a 0.001s en segments.ts
-- [x] 2026-04-03: Build validado exitosamente
-
----
-
-### PROBLEMA #6: MENSAJE DE UI ENGAÑOSO
-**Prioridad:** MEDIA  
-**Estado:** ✅ RESUELTO  
-**Impacto:** BAJO - Mensaje más claro y preciso
-
-**Descripción:**
-El mensaje "Espera a que se genere la linea de tiempo" es engañoso porque el timeline se genera inmediatamente.
-
-**Evidencia:**
-```typescript
-// EditorPage.tsx línea ~160
-setUiMessage('Video cargado correctamente. Espera a que se genere la linea de tiempo.');
-```
-
-**Causa Raíz:**
-Mensaje obsoleto de versión anterior con generación asíncrona.
-
-**Archivos Involucrados:**
-- `src/features/editor/pages/EditorPage.tsx`
-
-**Solución Propuesta:**
-Cambiar mensaje a:
-```typescript
-setUiMessage('Video cargado correctamente. El timeline se está generando automáticamente.');
-```
-
-**Implementación:**
-- Actualizado mensaje en `EditorPage.tsx` línea 115
-- Mensaje más preciso que refleja el comportamiento real
-
-**Validación:**
-- [x] Build exitoso
-- [x] Mensaje más claro para el usuario
-
-**Resolución:**
-- [x] 2026-04-03: Mensaje actualizado en EditorPage.tsx
-- [x] 2026-04-03: Build validado exitosamente
-
----
-
-## 🔵 PROBLEMAS DE PRIORIDAD BAJA
-
-### PROBLEMA #7: VALIDACIÓN DE TAMAÑO DUPLICADA
-**Prioridad:** BAJA  
-**Estado:** ✅ RESUELTO  
-**Impacto:** BAJO - Código más limpio (DRY)
-
-**Descripción:**
-La validación de tamaño máximo de archivo (2GB) está duplicada en `useVideoUpload.ts` y en `EditorPage.tsx`.
-
-**Evidencia:**
-- `useVideoUpload.ts` línea 10: `maxFileSize: MAX_VIDEO_SIZE_BYTES`
-- `EditorPage.tsx` línea ~150: Validación manual de 2GB
-
-**Causa Raíz:**
-Defensa en profundidad implementada sin refactorización posterior.
-
-**Archivos Involucrados:**
-- `src/features/editor/hooks/useVideoUpload.ts`
-- `src/features/editor/pages/EditorPage.tsx`
-
-**Solución Propuesta:**
-Eliminar validación duplicada en `EditorPage.tsx` y confiar en la restricción de Uppy.
-
-**Implementación:**
-- Eliminada validación manual de 2GB en callback `onVideoSelected`
-- Uppy ya tiene configurado `maxFileSize: MAX_VIDEO_SIZE_BYTES` en `useVideoUpload.ts`
-- Principio DRY (Don't Repeat Yourself) respetado
-
-**Validación:**
-- [x] Uppy rechaza archivos >2GB correctamente
-- [x] No hay validación redundante
-- [x] Build exitoso
-
-**Resolución:**
-- [x] 2026-04-03: Validación duplicada eliminada de EditorPage.tsx
-- [x] 2026-04-03: Build validado exitosamente
-
----
-
-### PROBLEMA #8: POLLING SIN TIMEOUT
-**Prioridad:** BAJA  
-**Estado:** ❌ NO IMPLEMENTADO  
-**Impacto:** BAJO - Pendiente de robustez de polling en frontend
-
-**Descripción:**
-El polling de jobs de backend continúa indefinidamente si el servidor nunca responde.
-
-**Evidencia:**
-```typescript
-// api/hooks.ts
-refetchInterval: (query) => {
-  const status = query.state.data?.status;
-  if (!status || status === 'queued' || status === 'processing') {
-    return POLLING_INTERVAL_MS;  // ❌ Sin límite
-  }
-  return false;
-}
-```
-
-**Causa Raíz:**
-No se implementó timeout por simplicidad.
+# Project Fix Plan And Status Report
 
-**Archivos Involucrados:**
-- `src/features/editor/api/hooks.ts`
+Proyecto: VideoCut Studio  
+Rama de referencia: `dev`  
+Ultima actualizacion: 2026-04-04
 
-**Solución Propuesta:**
-Implementar timeout de 5 minutos y detener polling.
-
-**Justificación de NO implementación:**
-El backend existe y esta operativo en `apps/api`, pero esta mejora no se implemento en esta iteracion. Queda pendiente una validacion E2E (frontend + API) con escenarios de timeout y reintento.
-
-**Validación:**
-- [ ] Validar timeout con pruebas E2E frontend + API
-- [x] No implementado en esta fase
-
----
-
-### PROBLEMA #9: FORMATTIME SIN MILISEGUNDOS
-**Prioridad:** BAJA  
-**Estado:** ✅ RESUELTO  
-**Impacto:** MUY BAJO - Feature adicional disponible
-
-**Descripción:**
-La función `formatTime` no muestra milisegundos, lo cual podría ser útil para edición de precisión.
-
-**Evidencia:**
-```typescript
-// formatTime.ts
-return `${String(minutes).padStart(TWO_DIGITS, '0')}:${String(secs).padStart(TWO_DIGITS, '0')}`;
-```
-
-**Causa Raíz:**
-No se consideró necesario en la implementación inicial.
-
-**Archivos Involucrados:**
-- `src/shared/lib/formatTime.ts`
-
-**Solución Propuesta:**
-Agregar parámetro opcional `showMilliseconds: boolean = false` y mostrar centésimas si es true.
-
-**Implementación:**
-- Agregado parámetro opcional `showMilliseconds` a `formatTime()`
-- Muestra centésimas de segundo cuando está habilitado
-- Comportamiento por defecto sin cambios (backward compatible)
-- Documentación JSDoc agregada
-
-**Validación:**
-- [x] formatTime(10.567, true) → "00:10.56"
-- [x] formatTime(10.567, false) → "00:10" (comportamiento por defecto)
-- [x] Build exitoso
-
-**Resolución:**
-- [x] 2026-04-03: Parámetro showMilliseconds implementado
-- [x] 2026-04-03: Build validado exitosamente
-
----
-
-### PROBLEMA #10: SECCIÓN DE BACKEND SIEMPRE VISIBLE
-**Prioridad:** BAJA  
-**Estado:** ✅ RESUELTO  
-**Impacto:** MUY BAJO - UI más limpia
-
-**Descripción:**
-La tarjeta de "Procesamiento backend" en HeaderBar se muestra aunque no haya backend configurado.
-
-**Evidencia:**
-- `HeaderBar.tsx` siempre renderiza sección de backend
-
-**Causa Raíz:**
-No se implementó condicional basado en `VITE_API_BASE_URL`.
-
-**Archivos Involucrados:**
-- `src/features/editor/components/HeaderBar.tsx`
-
-**Solución Propuesta:**
-Ocultar sección si `import.meta.env.VITE_API_BASE_URL` no está definido.
-
-**Implementación:**
-- Condicionalizado bloque completo de "Procesamiento backend" en HeaderBar
-- Solo se muestra si VITE_API_BASE_URL está configurado
-- UI más limpia cuando no hay backend
-
-**Validación:**
-- [x] Sección oculta cuando no hay VITE_API_BASE_URL
-- [x] Sección visible cuando hay backend configurado
-- [x] Build exitoso
-
-**Resolución:**
-- [x] 2026-04-03: Condicional agregado en HeaderBar.tsx
-- [x] 2026-04-03: Build validado exitosamente
-
----
-
-## 📈 PROGRESO GENERAL
-
-**Completados:** 9/10 (90%)  
-**No Implementados:** 1/10 (10%) - Pendiente de implementacion  
-**Pendientes:** 0/10 (0%)
-
----
-
-## 🔄 HISTORIAL DE CAMBIOS
-
-### 2026-04-03
-- ✅ Auditoría técnica exhaustiva completada
-- ✅ Documento PROJECT_FIX_PLAN.md creado
-- ✅ **PROBLEMA #1 RESUELTO:** Funcionalidad de trim/recorte completamente implementada
-  - ✅ 7 archivos modificados/creados
-  - ✅ TypeCheck exitoso
-  - ✅ Build exitoso
-  - ✅ Commit ba7c45f: "feat(editor): implement trim range workflow and integrate timeline controls"
-  - ✅ Publicado en origin/dev
-- ✅ **PROBLEMA #2 RESUELTO PARCIALMENTE:** Región de trim redimensionable
-- ✅ **PROBLEMA #3 RESUELTO:** Historial captura trim range
-- ✅ **PROBLEMA #4 RESUELTO:** Threshold de sincronización reducido de 180ms a 50ms
-  - ✅ Constante compartida SYNC_THRESHOLD creada
-  - ✅ VideoPlayer.tsx y TimelinePanel.tsx actualizados
-  - ✅ Build exitoso
-- ✅ **PROBLEMA #5 RESUELTO:** EPSILON reducido de 20ms a 1ms para mayor precisión
-  - ✅ segments.ts actualizado
-  - ✅ Build exitoso
-- ✅ **PROBLEMA #6 RESUELTO:** Mensaje UI corregido (más preciso)
-  - ✅ EditorPage.tsx actualizado
-  - ✅ Build exitoso
-- ✅ **PROBLEMA #7 RESUELTO:** Validación duplicada eliminada (DRY)
-  - ✅ EditorPage.tsx limpiado
-  - ✅ Build exitoso
-- ❌ **PROBLEMA #8 NO IMPLEMENTADO:** Polling timeout pendiente de implementacion y validacion E2E
-- ✅ **PROBLEMA #9 RESUELTO:** formatTime con soporte opcional de milisegundos
-  - ✅ formatTime.ts actualizado con parámetro showMilliseconds
-  - ✅ Build exitoso
-- ✅ **PROBLEMA #10 RESUELTO:** Sección backend condicionalizada
-  - ✅ HeaderBar.tsx actualizado
-  - ✅ Build exitoso
-- 📝 Priorización técnica establecida
-
----
-
-## 🎉 PLAN COMPLETADO AL 90%
-
-**Fecha de finalización:** 03 de Abril, 2026  
-**Total de problemas:** 10  
-**Resueltos:** 9 (90%)  
-**No implementados:** 1 (10%) - Pendiente de implementacion
-
-**Resumen de logros:**
-- ✅ Funcionalidad completa de trim/recorte implementada
-- ✅ Optimizaciones de precisión (threshold y EPSILON)
-- ✅ Mejoras de UI y mensajes
-- ✅ Código limpio (DRY, condicionales)
-- ✅ Features adicionales (milisegundos en formatTime)
-- ✅ Todas las validaciones con build exitoso
-
-**Problema pendiente de robustez frontend/API:**
-- ❌ PROBLEMA #8: Timeout en polling (pendiente de implementacion y validacion E2E)
-
----
-
-## 📝 NOTAS TÉCNICAS
-
-### Orden de Ejecución Recomendado:
-1. **PROBLEMA #1** (Crítico) - Implementar funcionalidad de trim completa
-2. **PROBLEMA #3** (Alto) - Actualizar historial para trim (dependiente de #1)
-3. **PROBLEMA #4** (Medio) - Reducir threshold de sincronización
-4. **PROBLEMA #5** (Medio) - Reducir EPSILON
-5. **PROBLEMA #6** (Medio) - Corregir mensaje UI
-6. **PROBLEMA #7** (Bajo) - Eliminar validación duplicada
-7. **PROBLEMA #8** (Bajo) - Implementar timeout en polling
-8. **PROBLEMA #9** (Bajo) - Agregar milisegundos a formatTime
-9. **PROBLEMA #10** (Bajo) - Condicionalizar sección backend
-
-### Dependencias:
-- PROBLEMA #2 se resuelve parcialmente con PROBLEMA #1
-- PROBLEMA #3 depende de PROBLEMA #1
-
----
-
-**Última actualización:** 2026-04-03
+## Objetivo Del Documento
+
+Este documento reemplaza versiones obsoletas del plan anterior y consolida:
+- Logros tecnicos reales ya entregados.
+- Incidentes detectados en pruebas reales.
+- Correcciones aplicadas y su estado.
+- Faltantes funcionales y plan de trabajo proximo.
+
+## Estado Real Del Proyecto
+
+Resumen actual:
+- Frontend: funcional.
+- Backend: parcial operativo (MVP).
+- Upload reanudable: funcional con topologia correcta (`api + tusd` en Docker).
+- Flujo E2E principal: validado con video real.
+
+## Registro De Logros Confirmados
+
+### Logros de arquitectura
+- Se confirmo backend real en `apps/api` con rutas, servicios y procesamiento FFmpeg.
+- Se alineo documentacion con el estado real del repositorio.
+
+### Logros de producto
+- Trim range funcional integrado a store, timeline y payload.
+- Historial (undo/redo) incluye estado de trim.
+- Segmentacion keep/remove funcionando con payload de jobs.
+
+### Logros de integracion
+- Flujo frontend -> API de jobs validado.
+- Flujo Tus -> uploadId -> jobs validado.
+- Descarga de resultados backend validada.
+
+### Logros de calidad tecnica
+- Correccion de deprecaciones de TypeScript 6 en tsconfig.
+- Typecheck frontend y build backend exitosos.
+
+## Incidentes Reales Y Correcciones
+
+### INC-2026-04-04-01 - Upload fallido por hook Tus
+Severidad: Alta  
+Estado: Resuelto
+
+Sintoma:
+- Upload no finalizaba correctamente.
+- Jobs devolvian `source.uploadId` faltante.
+
+Causa raiz:
+- `tusd` corria en Docker con hook `http://api:3000/hooks/upload`.
+- `api` corria local fuera de la red Docker.
+- `tusd` no podia resolver host `api`.
+
+Correccion aplicada:
+- Topologia recomendada actual: frontend local + `docker compose up -d api tusd`.
+- Validacion de hooks confirmada en logs (`pre-create`, `post-create`, `post-finish`).
+
+Evidencia de cierre:
+- Upload Tus minimo de prueba con `201` (create) y `204` (patch).
+- `uploadId` generado y disponible para jobs.
+
+### INC-2026-04-04-02 - Preview y timeline sin reproduccion/render
+Severidad: Alta  
+Estado: Resuelto
+
+Sintoma:
+- Preview en gris.
+- Timeline sin comportamiento esperado.
+
+Causa raiz:
+- Inicializacion inestable del preview.
+- Timeline sin reinicializacion robusta al cambiar source.
+
+Correccion aplicada:
+- Estabilizacion de flujo de preview en `VideoPlayer`.
+- Reinicializacion de timeline por `mediaSourceUrl`.
+
+Evidencia de cierre:
+- Flujo de usuario completo funcionando tras recarga y nueva carga de archivo.
+
+### INC-2026-04-04-03 - Jobs lanzados sin uploadId listo
+Severidad: Media  
+Estado: Resuelto
+
+Sintoma:
+- Usuario podia pulsar export/extract antes de completar upload.
+
+Causa raiz:
+- Falta de guard de negocio en construccion de payload.
+
+Correccion aplicada:
+- Bloqueo de envio de job si `isTusEnabled` y no hay `video.uploadId`.
+- Mensajes de error accionables para el usuario.
+
+## Validacion De Calidad Ejecutada
+
+Pruebas ejecutadas y resultado:
+- Frontend `npm run typecheck`: OK.
+- Backend `npm run build`: OK.
+- API `GET /health`: OK.
+- E2E con video real:
+  - `POST /jobs/export`: completed.
+  - `POST /jobs/extract-audio`: completed.
+  - Descarga de MP4 y MP3 generados: OK.
+
+## Faltantes Funcionales Prioritarios
+
+### P0 - Robustez minima
+1. Timeout y politica de reintento para polling de jobs.
+2. Mejor manejo de errores de reproduccion en UI (mensaje visible con codigo de error).
+
+### P1 - Escalabilidad y persistencia
+1. Migrar job store en memoria a cola persistente (BullMQ + Redis).
+2. Persistir metadata de jobs/resultados en DB.
+
+### P2 - Seguridad y hardening
+1. Validacion de schemas en runtime para payloads.
+2. AuthN/AuthZ para endpoints de procesamiento.
+3. Rate limiting y trazabilidad estructurada.
+
+## Riesgos Actuales
+
+Riesgos abiertos:
+- Reinicio de API pierde estado de jobs (store en memoria).
+- Sin autenticacion, cualquier cliente puede invocar endpoints.
+- Sin DB, no hay historial persistente de proyectos/procesamientos.
+
+## Plan De Trabajo Recomendado (Siguiente Sprint)
+
+1. Implementar timeout de polling + UI de reintento.
+2. Introducir validacion runtime de payload en backend.
+3. Definir y montar infraestructura de cola persistente.
+4. Agregar trazabilidad de jobs (idempotencia y correlacion de logs).
+5. Diseñar capa minima de autenticacion para operaciones de procesamiento.
+
+## Criterio De Cierre De La Proxima Iteracion
+
+La siguiente iteracion se considera cerrada cuando:
+- Polling no queda indefinido.
+- Jobs sobreviven reinicios de API.
+- Payloads invalidos son rechazados con errores claros y consistentes.
+- Existen controles basicos de seguridad en endpoints de procesamiento.
