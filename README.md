@@ -80,13 +80,11 @@ npm run dev
 
 Abre: http://localhost:5173
 
-### Opcion B: Frontend + Backend En Local (Sin Docker Para Web)
+### Opcion B: Frontend Local + API/Tusd En Docker (Recomendada)
 
 1. Instala dependencias:
 
 ```bash
-npm install
-cd apps/api
 npm install
 ```
 
@@ -103,16 +101,13 @@ VITE_TUS_ENDPOINT=http://localhost:1080/files/
 # Terminal 1 (frontend)
 npm run dev
 
-# Terminal 2 (backend)
-cd apps/api
-npm run dev
+# Terminal 2 (backend + tusd)
+docker compose up -d api tusd
 ```
 
-4. Levanta tusd por Docker (recomendado para pruebas de upload reanudable):
-
-```bash
-docker compose up tusd -d
-```
+Nota importante:
+- El `docker-compose.yml` configura tusd con hook `http://api:3000/hooks/upload`.
+- Por eso, para upload reanudable funcional, `api` y `tusd` deben correr juntos en la misma red Docker.
 
 ### Opcion C: Stack Contenerizado (Docker Compose)
 

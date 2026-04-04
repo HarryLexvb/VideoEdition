@@ -184,6 +184,16 @@ export function EditorPage() {
       return null;
     }
 
+    if (isTusEnabled && !video.uploadId) {
+      if (uploadState === 'uploading') {
+        setUiError('La subida aun esta en progreso. Espera a que Upload llegue a 100% antes de exportar o extraer audio.');
+      } else {
+        setUiError('No se obtuvo uploadId del archivo. Vuelve a subir el video para continuar.');
+      }
+
+      return null;
+    }
+
     if (video.duration <= 0) {
       setUiError('Esperando metadata del video. Intenta nuevamente en unos segundos.');
       return null;
