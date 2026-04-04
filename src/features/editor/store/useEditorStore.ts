@@ -30,6 +30,13 @@ interface EditorStore extends EditorSnapshot {
   setSegmentDisposition: (segmentId: string, disposition: SegmentDisposition) => void;
   setSelectedSegmentDisposition: (disposition: SegmentDisposition) => void;
   toggleSegmentDisposition: (segmentId: string) => void;
+  setTrimStart: (time: number | null) => void;
+  setTrimEnd: (time: number | null) => void;
+  setTrimRange: (start: number | null, end: number | null) => void;
+  setTrimStartAtPlayhead: () => void;
+  setTrimEndAtPlayhead: () => void;
+  clearTrimRange: () => void;
+  validateTrimRange: () => boolean;
   resetProject: () => void;
   undo: () => void;
   redo: () => void;
@@ -49,6 +56,8 @@ function snapshotFromState(state: EditorStore): EditorSnapshot {
     segments: state.segments.map((segment) => ({ ...segment })),
     selectedSegmentId: state.selectedSegmentId,
     playheadTime: state.playheadTime,
+    trimStart: state.trimStart,
+    trimEnd: state.trimEnd,
   };
 }
 
@@ -58,6 +67,8 @@ function cloneSnapshot(snapshot: EditorSnapshot): EditorSnapshot {
     segments: snapshot.segments.map((segment) => ({ ...segment })),
     selectedSegmentId: snapshot.selectedSegmentId,
     playheadTime: snapshot.playheadTime,
+    trimStart: snapshot.trimStart,
+    trimEnd: snapshot.trimEnd,
   };
 }
 
@@ -98,6 +109,8 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
   segments: createDefaultSegmentsForVideo(null),
   selectedSegmentId: null,
   playheadTime: 0,
+  trimStart: null,
+  trimEnd: null,
   past: [],
   future: [],
   uploadState: 'idle',
@@ -109,6 +122,8 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
       segments: createDefaultSegmentsForVideo(video),
       selectedSegmentId: null,
       playheadTime: 0,
+      trimStart: null,
+      trimEnd: null,
       past: [],
       future: [],
       uploadState: video.uploadId ? 'uploaded' : 'idle',
@@ -270,6 +285,96 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
     state.setSegmentDisposition(segmentId, segment.disposition === 'keep' ? 'remove' : 'keep');
   },
 
+  setTrimStart: (time) => {
+    set((state) => {
+      const duration = getDurationFromVideo(state.video);
+      if (duration <= 0) {
+        return state;
+      }
+
+      const clampedTime = time !== null ? clampTime(time, duration) : null;
+
+      if (clampedTime !== null && state.trimEnd !== null && clampedTime >= state.trimEnd) {
+        return state;
+      }
+
+      return {
+        ...state,
+        trimStart: clampedTime,
+      };
+    });
+  },
+
+  setTrimEnd: (time) => {
+    set((state) => {
+      const duration = getDurationFromVideo(state.video);
+      if (duration <= 0) {
+        return state;
+      }
+
+      const clampedTime = time !== null ? clampTime(time, duration) : null;
+
+      if (clampedTime !== null && state.trimStart !== null && clampedTime <= state.trimStart) {
+        return state;
+      }
+
+      return {
+        ...state,
+        trimEnd: clampedTime,
+      };
+    });
+  },
+
+  setTrimRange: (start, end) => {
+    set((state) => {
+      const duration = getDurationFromVideo(state.video);
+      if (duration <= 0) {
+        return state;
+      }
+
+      const clampedStart = start !== null ? clampTime(start, duration) : null;
+      const clampedEnd = end !== null ? clampTime(end, duration) : null;
+
+      if (clampedStart !== null && clampedEnd !== null && clampedStart >= clampedEnd) {
+        return state;
+      }
+
+      return updateWithHistory(state, `Trim: ${formatTime(clampedStart ?? 0)} - ${formatTime(clampedEnd ?? duration)}`, (snapshot) => ({
+        ...snapshot,
+        trimStart: clampedStart,
+        trimEnd: clampedEnd,
+      }));
+    });
+  },
+
+  setTrimStartAtPlayhead: () => {
+    const state = get();
+    state.setTrimStart(state.playheadTime);
+  },
+
+  setTrimEndAtPlayhead: () => {
+    const state = get();
+    state.setTrimEnd(state.playheadTime);
+  },
+
+  clearTrimRange: () => {
+    set((state) =>
+      updateWithHistory(state, 'Limpiar trim', (snapshot) => ({
+        ...snapshot,
+        trimStart: null,
+        trimEnd: null,
+      }))
+    );
+  },
+
+  validateTrimRange: () => {
+    const state = get();
+    if (state.trimStart === null || state.trimEnd === null) {
+      return false;
+    }
+    return state.trimStart < state.trimEnd;
+  },
+
   resetProject: () => {
     set((state) => {
       if (!state.video) {
@@ -278,6 +383,8 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
           segments: createDefaultSegmentsForVideo(null),
           selectedSegmentId: null,
           playheadTime: 0,
+          trimStart: null,
+          trimEnd: null,
           past: [],
           future: [],
         };
@@ -288,6 +395,8 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
         segments: createDefaultSegmentsForVideo(state.video),
         selectedSegmentId: null,
         playheadTime: 0,
+        trimStart: null,
+        trimEnd: null,
         past: [],
         future: [],
       };

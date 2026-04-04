@@ -22,6 +22,8 @@ export interface EditorSnapshot {
   segments: TimelineSegment[];
   selectedSegmentId: string | null;
   playheadTime: number;
+  trimStart: number | null;
+  trimEnd: number | null;
 }
 
 export interface HistoryRecord {

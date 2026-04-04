@@ -14,9 +14,13 @@ interface TimelinePanelProps {
   selectedSegmentId: string | null;
   duration: number;
   playheadTime: number;
+  trimStart: number | null;
+  trimEnd: number | null;
   onSeek: (time: number) => void;
   onCutAtPlayhead: () => void;
   onSelectSegment: (segmentId: string) => void;
+  onSetTrimStart: (time: number) => void;
+  onSetTrimEnd: (time: number) => void;
 }
 
 function getRegionColor(segment: TimelineSegment, selectedSegmentId: string | null): string {
@@ -35,15 +39,21 @@ export function TimelinePanel({
   selectedSegmentId,
   duration,
   playheadTime,
+  trimStart,
+  trimEnd,
   onSeek,
   onCutAtPlayhead,
   onSelectSegment,
+  onSetTrimStart,
+  onSetTrimEnd,
 }: TimelinePanelProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const waveSurferRef = useRef<WaveSurfer | null>(null);
   const regionsPluginRef = useRef<ReturnType<typeof RegionsPlugin.create> | null>(null);
   const onSeekRef = useRef(onSeek);
   const onSelectSegmentRef = useRef(onSelectSegment);
+  const onSetTrimStartRef = useRef(onSetTrimStart);
+  const onSetTrimEndRef = useRef(onSetTrimEnd);
 
   // Mantener refs actualizadas sin trigger re-render
   useEffect(() => {
@@ -53,6 +63,14 @@ export function TimelinePanel({
   useEffect(() => {
     onSelectSegmentRef.current = onSelectSegment;
   }, [onSelectSegment]);
+
+  useEffect(() => {
+    onSetTrimStartRef.current = onSetTrimStart;
+  }, [onSetTrimStart]);
+
+  useEffect(() => {
+    onSetTrimEndRef.current = onSetTrimEnd;
+  }, [onSetTrimEnd]);
 
   const keepCount = useMemo(() => segments.filter((segment) => segment.disposition === 'keep').length, [segments]);
   const removeCount = useMemo(() => segments.filter((segment) => segment.disposition === 'remove').length, [segments]);
@@ -102,18 +120,31 @@ export function TimelinePanel({
       onSeekRef.current(region.start);
     };
 
-    waveSurfer.on('interaction', handleInteraction);
-    regionsPlugin.on('region-clicked', handleRegionClicked);
+    const unsubscribeInteraction = waveSurfer.on('interaction', handleInteraction);
+    const unsubscribeRegionClicked = regionsPlugin.on('region-clicked', handleRegionClicked);
+
+    // Event handler para actualización de región de trim
+    const handleRegionUpdated = (region: { id: string; start: number; end: number }) => {
+      if (region.id === 'trim-range') {
+        onSetTrimStartRef.current(region.start);
+        onSetTrimEndRef.current(region.end);
+      }
+    };
+
+    const unsubscribeRegionUpdated = regionsPlugin.on('region-updated', handleRegionUpdated);
 
     return () => {
       console.log('[TimelinePanel] Destruyendo WaveSurfer');
+      unsubscribeInteraction();
+      unsubscribeRegionClicked();
+      unsubscribeRegionUpdated();
       waveSurfer.destroy();
       waveSurferRef.current = null;
       regionsPluginRef.current = null;
     };
   }, [mediaElement]); // Solo recrear cuando mediaElement cambie
 
-  // Actualizar regions cuando cambien segments o selectedSegmentId
+  // Actualizar regions cuando cambien segments, selectedSegmentId o trim
   useEffect(() => {
     const regionsPlugin = regionsPluginRef.current;
     if (!regionsPlugin) {
@@ -126,7 +157,20 @@ export function TimelinePanel({
       region.remove();
     }
 
-    // Agregar nuevas regions
+    // Agregar región de trim SI existe
+    if (trimStart !== null && trimEnd !== null) {
+      regionsPlugin.addRegion({
+        id: 'trim-range',
+        start: trimStart,
+        end: trimEnd,
+        color: 'rgba(59, 130, 246, 0.25)',
+        resize: true,
+        drag: false,
+        content: '<div style="pointer-events: none; color: #1e40af; font-weight: 600; font-size: 11px; padding: 4px;">TRIM RANGE</div>',
+      });
+    }
+
+    // Agregar regions de segmentos
     for (const segment of segments) {
       regionsPlugin.addRegion({
         id: segment.id,
@@ -137,7 +181,7 @@ export function TimelinePanel({
         drag: false,
       });
     }
-  }, [segments, selectedSegmentId]);
+  }, [segments, selectedSegmentId, trimStart, trimEnd]);
 
   // Sincronizar playhead time con WaveSurfer
   useEffect(() => {

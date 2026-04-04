@@ -9,6 +9,7 @@ import { useProcessingJob, useStartExportJob, useStartExtractAudioJob } from '..
 import { HeaderBar } from '../components/HeaderBar';
 import { SidebarPanel } from '../components/SidebarPanel';
 import { TimelinePanel } from '../components/TimelinePanel';
+import { TrimControls } from '../components/TrimControls';
 import { VideoPlayer } from '../components/VideoPlayer';
 import { useVideoUpload } from '../hooks/useVideoUpload';
 import { buildEditorJobPayload } from '../model/projectPayload';
@@ -32,6 +33,8 @@ export function EditorPage() {
   const segments = useEditorStore((state) => state.segments);
   const selectedSegmentId = useEditorStore((state) => state.selectedSegmentId);
   const playheadTime = useEditorStore((state) => state.playheadTime);
+  const trimStart = useEditorStore((state) => state.trimStart);
+  const trimEnd = useEditorStore((state) => state.trimEnd);
   const past = useEditorStore((state) => state.past);
   const future = useEditorStore((state) => state.future);
   const uploadState = useEditorStore((state) => state.uploadState);
@@ -46,6 +49,11 @@ export function EditorPage() {
   const selectSegment = useEditorStore((state) => state.selectSegment);
   const setSelectedSegmentDisposition = useEditorStore((state) => state.setSelectedSegmentDisposition);
   const toggleSegmentDisposition = useEditorStore((state) => state.toggleSegmentDisposition);
+  const setTrimStart = useEditorStore((state) => state.setTrimStart);
+  const setTrimEnd = useEditorStore((state) => state.setTrimEnd);
+  const setTrimStartAtPlayhead = useEditorStore((state) => state.setTrimStartAtPlayhead);
+  const setTrimEndAtPlayhead = useEditorStore((state) => state.setTrimEndAtPlayhead);
+  const clearTrimRange = useEditorStore((state) => state.clearTrimRange);
   const undo = useEditorStore((state) => state.undo);
   const redo = useEditorStore((state) => state.redo);
   const resetProject = useEditorStore((state) => state.resetProject);
@@ -188,7 +196,7 @@ export function EditorPage() {
       return null;
     }
 
-    return buildEditorJobPayload(video, segments);
+    return buildEditorJobPayload(video, segments, trimStart, trimEnd);
   }
 
   function runExportJob(): void {
@@ -363,26 +371,42 @@ export function EditorPage() {
               selectedSegmentId={selectedSegmentId}
               duration={video?.duration ?? 0}
               playheadTime={playheadTime}
+              trimStart={trimStart}
+              trimEnd={trimEnd}
               onSeek={setPlayheadTime}
               onCutAtPlayhead={addCutAtPlayhead}
               onSelectSegment={selectSegment}
+              onSetTrimStart={setTrimStart}
+              onSetTrimEnd={setTrimEnd}
             />
           </div>
 
-          <SidebarPanel
-            segments={segments}
-            selectedSegmentId={selectedSegmentId}
-            onSelectSegment={selectSegment}
-            onSeek={setPlayheadTime}
-            onSetSelectedDisposition={setSelectedSegmentDisposition}
-            onToggleSegmentDisposition={toggleSegmentDisposition}
-            onUndo={undo}
-            onRedo={redo}
-            canUndo={canUndo}
-            canRedo={canRedo}
-            historyPast={historyPast}
-            historyFuture={historyFuture}
-          />
+          <div className="space-y-5">
+            <SidebarPanel
+              segments={segments}
+              selectedSegmentId={selectedSegmentId}
+              onSelectSegment={selectSegment}
+              onSeek={setPlayheadTime}
+              onSetSelectedDisposition={setSelectedSegmentDisposition}
+              onToggleSegmentDisposition={toggleSegmentDisposition}
+              onUndo={undo}
+              onRedo={redo}
+              canUndo={canUndo}
+              canRedo={canRedo}
+              historyPast={historyPast}
+              historyFuture={historyFuture}
+            />
+
+            <TrimControls
+              trimStart={trimStart}
+              trimEnd={trimEnd}
+              playheadTime={playheadTime}
+              duration={video?.duration ?? 0}
+              onSetTrimStart={setTrimStartAtPlayhead}
+              onSetTrimEnd={setTrimEndAtPlayhead}
+              onClearTrimRange={clearTrimRange}
+            />
+          </div>
         </main>
 
         <footer className="mt-6 rounded-2xl border border-white/60 bg-white/70 p-4 text-xs text-slate-500 dark:border-slate-700/50 dark:bg-slate-800/70 dark:text-slate-400">
