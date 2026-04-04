@@ -323,7 +323,9 @@ MIT License
 ✅ Caracteres especiales mal codificados (UTF-8)  
 ✅ Falta de funcionalidad de trim/recorte de video  
 ✅ Historial no capturaba trim range  
-✅ Regions de timeline no redimensionables
+✅ Regions de timeline no redimensionables  
+✅ Threshold de sincronización alto (180ms → 50ms)  
+✅ EPSILON demasiado alto (20ms → 1ms)
 
 ### Cambios Recientes (v0.5.0)
 
@@ -333,6 +335,8 @@ MIT License
 - ✅ Historial (undo/redo) ahora captura trim range
 - ✅ Payload de exportación incluye trimRange con metadata
 - ✅ Store extendido con 7 acciones de trim
+- ✅ **Optimización:** Threshold de sincronización reducido 180ms → 50ms (3.6x más preciso)
+- ✅ **Optimización:** EPSILON reducido 20ms → 1ms (20x más preciso en cortes)
 - ✅ TypeCheck y Build validados exitosamente
 - 📝 Documentación actualizada con estado real del proyecto
 
