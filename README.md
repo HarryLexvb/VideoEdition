@@ -325,7 +325,9 @@ MIT License
 ✅ Historial no capturaba trim range  
 ✅ Regions de timeline no redimensionables  
 ✅ Threshold de sincronización alto (180ms → 50ms)  
-✅ EPSILON demasiado alto (20ms → 1ms)
+✅ EPSILON demasiado alto (20ms → 1ms)  
+✅ Mensaje UI engañoso corregido  
+✅ Validación de tamaño duplicada eliminada
 
 ### Cambios Recientes (v0.5.0)
 
@@ -337,6 +339,8 @@ MIT License
 - ✅ Store extendido con 7 acciones de trim
 - ✅ **Optimización:** Threshold de sincronización reducido 180ms → 50ms (3.6x más preciso)
 - ✅ **Optimización:** EPSILON reducido 20ms → 1ms (20x más preciso en cortes)
+- ✅ **Corrección:** Mensaje UI actualizado para mayor claridad
+- ✅ **Limpieza:** Validación duplicada eliminada (DRY)
 - ✅ TypeCheck y Build validados exitosamente
 - 📝 Documentación actualizada con estado real del proyecto
 
