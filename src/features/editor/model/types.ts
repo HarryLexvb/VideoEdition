@@ -40,6 +40,7 @@ export interface EditorSnapshot {
   tracks: MediaTrack[];
   segments: TimelineSegment[];
   selectedSegmentId: string | null;
+  selectedTrackIds: string[];
   playheadTime: number;
   trimStart: number | null;
   trimEnd: number | null;

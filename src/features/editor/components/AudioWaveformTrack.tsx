@@ -5,6 +5,7 @@ interface AudioWaveformTrackProps {
   duration: number;
   playheadTime: number;
   height?: number;
+  muted?: boolean;
   onSeek?: (time: number) => void;
 }
 
@@ -17,6 +18,7 @@ export function AudioWaveformTrack({
   duration,
   playheadTime,
   height = 72,
+  muted = false,
   onSeek,
 }: AudioWaveformTrackProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -173,6 +175,13 @@ export function AudioWaveformTrack({
       {error && (
         <div className="absolute inset-0 flex items-center justify-center">
           <span className="text-xs text-slate-500">No se pudo decodificar el audio de este archivo</span>
+        </div>
+      )}
+
+      {/* Muted overlay */}
+      {muted && (
+        <div className="absolute inset-0 flex items-center justify-center bg-slate-900/60 rounded-lg pointer-events-none">
+          <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400 select-none">SILENCIADO</span>
         </div>
       )}
 

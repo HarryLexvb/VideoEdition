@@ -13,6 +13,7 @@ interface TimelinePanelProps {
   tracks: MediaTrack[];
   segments: TimelineSegment[];
   selectedSegmentId: string | null;
+  selectedTrackIds: string[];
   duration: number;
   playheadTime: number;
   trimStart: number | null;
@@ -22,6 +23,8 @@ interface TimelinePanelProps {
   onSelectSegment: (segmentId: string) => void;
   onSetTrimStart: (time: number) => void;
   onSetTrimEnd: (time: number) => void;
+  onToggleTrackMute: (trackId: string) => void;
+  onSelectTrack: (trackId: string, multi: boolean) => void;
 }
 
 /**
@@ -163,6 +166,7 @@ function TrimOverlay({
  */
 function TrackRow({
   track,
+  isSelected,
   segments,
   selectedSegmentId,
   duration,
@@ -171,8 +175,11 @@ function TrackRow({
   trimEnd,
   onSeek,
   onSelectSegment,
+  onToggleMute,
+  onSelectTrack,
 }: {
   track: MediaTrack;
+  isSelected: boolean;
   segments: TimelineSegment[];
   selectedSegmentId: string | null;
   duration: number;
@@ -181,43 +188,86 @@ function TrackRow({
   trimEnd: number | null;
   onSeek: (time: number) => void;
   onSelectSegment: (id: string) => void;
+  onToggleMute: (trackId: string) => void;
+  onSelectTrack: (trackId: string, multi: boolean) => void;
 }) {
   const isVideo = track.kind === 'video';
+
+  function handleContentClick(e: React.MouseEvent<HTMLDivElement>) {
+    onSelectTrack(track.id, e.ctrlKey || e.metaKey);
+  }
 
   return (
     <div className="flex items-stretch gap-3">
       {/* Track label column */}
-      <div className="flex w-32 flex-shrink-0 flex-col items-start justify-center gap-1 rounded-lg bg-slate-800/60 px-3 py-2 ring-1 ring-slate-700/50">
-        <div className="flex items-center gap-1.5">
-          {isVideo ? (
-            <Film className="h-3.5 w-3.5 text-brand-400" aria-hidden="true" />
-          ) : (
-            <Music2 className="h-3.5 w-3.5 text-purple-400" aria-hidden="true" />
-          )}
-          <span className={`text-xs font-semibold uppercase tracking-wide ${isVideo ? 'text-brand-400' : 'text-purple-400'}`}>
-            {isVideo ? 'Video' : 'Audio'}
-          </span>
+      <div
+        className={`flex w-36 flex-shrink-0 flex-col items-start justify-center gap-1 rounded-lg px-3 py-2 ring-1 transition-all cursor-pointer select-none
+          ${isSelected
+            ? 'bg-slate-700/80 ring-brand-500/70 shadow-[0_0_0_2px_rgba(99,102,241,0.35)]'
+            : 'bg-slate-800/60 ring-slate-700/50'
+          }`}
+        onClick={(e) => onSelectTrack(track.id, e.ctrlKey || e.metaKey)}
+        role="button"
+        tabIndex={0}
+        aria-pressed={isSelected}
+        aria-label={`Pista ${isVideo ? 'Video' : 'Audio'}: ${track.label}${isSelected ? ' (seleccionada)' : ''}`}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            onSelectTrack(track.id, e.ctrlKey || e.metaKey);
+          }
+        }}
+      >
+        <div className="flex w-full items-center justify-between gap-1">
+          <div className="flex items-center gap-1.5 min-w-0">
+            {isVideo ? (
+              <Film className="h-3.5 w-3.5 flex-shrink-0 text-brand-400" aria-hidden="true" />
+            ) : (
+              <Music2 className="h-3.5 w-3.5 flex-shrink-0 text-purple-400" aria-hidden="true" />
+            )}
+            <span className={`text-xs font-semibold uppercase tracking-wide ${isVideo ? 'text-brand-400' : 'text-purple-400'}`}>
+              {isVideo ? 'Video' : 'Audio'}
+            </span>
+          </div>
+          {/* Mute toggle button */}
+          <button
+            type="button"
+            className={`flex-shrink-0 rounded p-0.5 transition-colors focus:outline-none focus:ring-1 focus:ring-brand-400
+              ${track.muted
+                ? 'text-rose-400 hover:text-rose-300 bg-rose-950/40 hover:bg-rose-900/40'
+                : 'text-slate-400 hover:text-slate-200 bg-slate-700/40 hover:bg-slate-600/40'
+              }`}
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleMute(track.id);
+            }}
+            aria-label={track.muted ? `Activar audio de pista ${isVideo ? 'video' : 'audio'}` : `Silenciar pista ${isVideo ? 'video' : 'audio'}`}
+            title={track.muted ? 'Activar audio' : 'Silenciar'}
+          >
+            {track.muted ? (
+              <VolumeX className="h-3.5 w-3.5" aria-hidden="true" />
+            ) : (
+              <Volume2 className="h-3.5 w-3.5" aria-hidden="true" />
+            )}
+          </button>
         </div>
         <span className="max-w-full truncate text-[10px] text-slate-400" title={track.label}>
           {track.label}
         </span>
-        <div className="mt-1 flex items-center gap-1">
-          {track.muted ? (
-            <span className="inline-flex items-center gap-1 rounded bg-slate-700 px-1.5 py-0.5 text-[9px] font-medium text-slate-400">
-              <VolumeX className="h-2.5 w-2.5" />
-              Muted
-            </span>
-          ) : (
-            <span className="inline-flex items-center gap-1 rounded bg-slate-700/50 px-1.5 py-0.5 text-[9px] font-medium text-slate-500">
-              <Volume2 className="h-2.5 w-2.5" />
-              Audio on
-            </span>
-          )}
-        </div>
+        {track.muted && (
+          <span className="inline-flex items-center gap-1 rounded bg-rose-950/50 px-1.5 py-0.5 text-[9px] font-medium text-rose-400">
+            <VolumeX className="h-2.5 w-2.5" />
+            Silenciado
+          </span>
+        )}
       </div>
 
       {/* Track content area */}
-      <div className="relative flex-1 min-w-0">
+      <div
+        className="relative flex-1 min-w-0 cursor-pointer"
+        onClick={handleContentClick}
+        role="presentation"
+      >
         {isVideo ? (
           <VideoThumbnailStrip
             sourceUrl={track.sourceUrl}
@@ -230,8 +280,14 @@ function TrackRow({
             duration={track.duration}
             playheadTime={playheadTime}
             height={72}
+            muted={track.muted}
             onSeek={onSeek}
           />
+        )}
+
+        {/* Selection ring on content */}
+        {isSelected && (
+          <div className="absolute inset-0 rounded-lg ring-2 ring-brand-500/60 pointer-events-none" aria-hidden="true" />
         )}
 
         {/* Segment overlay on top of the visual */}
@@ -263,6 +319,7 @@ export function TimelinePanel({
   tracks,
   segments,
   selectedSegmentId,
+  selectedTrackIds,
   duration,
   playheadTime,
   trimStart,
@@ -272,6 +329,8 @@ export function TimelinePanel({
   onSelectSegment,
   onSetTrimStart: _onSetTrimStart,
   onSetTrimEnd: _onSetTrimEnd,
+  onToggleTrackMute,
+  onSelectTrack,
 }: TimelinePanelProps) {
   const scrubberRef = useRef<HTMLDivElement | null>(null);
 
@@ -383,6 +442,7 @@ export function TimelinePanel({
               <TrackRow
                 key={track.id}
                 track={track}
+                isSelected={selectedTrackIds.includes(track.id)}
                 segments={segments}
                 selectedSegmentId={selectedSegmentId}
                 duration={duration}
@@ -391,9 +451,16 @@ export function TimelinePanel({
                 trimEnd={trimEnd}
                 onSeek={onSeek}
                 onSelectSegment={onSelectSegment}
+                onToggleMute={onToggleTrackMute}
+                onSelectTrack={onSelectTrack}
               />
             ))}
           </div>
+          {tracks.length > 1 && (
+            <p className="ml-[152px] mt-1 text-[9px] text-slate-500 dark:text-slate-600 select-none">
+              Ctrl+clic para seleccionar multiples pistas
+            </p>
+          )}
         </div>
       ) : (
         <div className="flex min-h-[180px] flex-col items-center justify-center gap-4 rounded-2xl border-2 border-dashed border-slate-300/70 bg-slate-50/50 p-8 text-center backdrop-blur-sm dark:border-slate-700/50 dark:bg-slate-900/30">

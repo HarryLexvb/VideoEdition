@@ -28,11 +28,13 @@ export function EditorPage() {
 
   const previousObjectUrlRef = useRef<string | null>(null);
   const lastHandledJobStatusRef = useRef<string | null>(null);
+  const hiddenAudioRef = useRef<HTMLAudioElement | null>(null);
 
   const video = useEditorStore((state) => state.video);
   const tracks = useEditorStore((state) => state.tracks);
   const segments = useEditorStore((state) => state.segments);
   const selectedSegmentId = useEditorStore((state) => state.selectedSegmentId);
+  const selectedTrackIds = useEditorStore((state) => state.selectedTrackIds);
   const playheadTime = useEditorStore((state) => state.playheadTime);
   const trimStart = useEditorStore((state) => state.trimStart);
   const trimEnd = useEditorStore((state) => state.trimEnd);
@@ -60,6 +62,8 @@ export function EditorPage() {
   const redo = useEditorStore((state) => state.redo);
   const resetProject = useEditorStore((state) => state.resetProject);
   const extractAudioLocally = useEditorStore((state) => state.extractAudioLocally);
+  const toggleTrackMute = useEditorStore((state) => state.toggleTrackMute);
+  const selectTrack = useEditorStore((state) => state.selectTrack);
 
   const historyPast = useMemo(() => past.map((record) => record.history), [past]);
   const historyFuture = useMemo(() => future.map((record) => record.history), [future]);
@@ -91,6 +95,115 @@ export function EditorPage() {
       mediaElement.muted = videoTrack.muted;
     }
   }, [mediaElement, tracks]);
+
+  // Manage hidden <audio> element for extracted audio track playback
+  useEffect(() => {
+    const audioTrack = tracks.find((t) => t.kind === 'audio');
+
+    if (!audioTrack || !mediaElement) {
+      // No audio track or no video element - destroy hidden audio if it exists
+      if (hiddenAudioRef.current) {
+        hiddenAudioRef.current.pause();
+        hiddenAudioRef.current.src = '';
+        hiddenAudioRef.current = null;
+      }
+      return;
+    }
+
+    // Create or reuse hidden audio element
+    if (!hiddenAudioRef.current) {
+      const audio = new Audio();
+      audio.preload = 'auto';
+      audio.style.display = 'none';
+      document.body.appendChild(audio);
+      hiddenAudioRef.current = audio;
+    }
+
+    const audio = hiddenAudioRef.current;
+
+    // Update src if changed
+    if (audio.src !== audioTrack.sourceUrl) {
+      const wasPaused = mediaElement.paused;
+      audio.src = audioTrack.sourceUrl;
+      audio.load();
+      if (!wasPaused) {
+        void audio.play().catch(() => undefined);
+      }
+    }
+
+    // Sync muted state
+    audio.muted = audioTrack.muted;
+
+    // Sync current time to video element
+    function syncTime() {
+      if (!audio || !mediaElement) return;
+      const diff = Math.abs(audio.currentTime - mediaElement.currentTime);
+      if (diff > 0.3) {
+        audio.currentTime = mediaElement.currentTime;
+      }
+    }
+
+    function onVideoPlay() {
+      if (!audio || !mediaElement) return;
+      audio.currentTime = mediaElement.currentTime;
+      void audio.play().catch(() => undefined);
+    }
+
+    function onVideoPause() {
+      if (!audio) return;
+      audio.pause();
+    }
+
+    function onVideoSeeked() {
+      if (!audio || !mediaElement) return;
+      audio.currentTime = mediaElement.currentTime;
+    }
+
+    function onVideoTimeUpdate() {
+      syncTime();
+    }
+
+    mediaElement.addEventListener('play', onVideoPlay);
+    mediaElement.addEventListener('pause', onVideoPause);
+    mediaElement.addEventListener('seeked', onVideoSeeked);
+    mediaElement.addEventListener('timeupdate', onVideoTimeUpdate);
+
+    // Initial state sync
+    audio.muted = audioTrack.muted;
+    if (!mediaElement.paused) {
+      audio.currentTime = mediaElement.currentTime;
+      void audio.play().catch(() => undefined);
+    }
+
+    return () => {
+      mediaElement.removeEventListener('play', onVideoPlay);
+      mediaElement.removeEventListener('pause', onVideoPause);
+      mediaElement.removeEventListener('seeked', onVideoSeeked);
+      mediaElement.removeEventListener('timeupdate', onVideoTimeUpdate);
+    };
+  }, [mediaElement, tracks]);
+
+  // Sync audio track muted state to hidden audio element
+  useEffect(() => {
+    const audioTrack = tracks.find((t) => t.kind === 'audio');
+    if (hiddenAudioRef.current && audioTrack) {
+      hiddenAudioRef.current.muted = audioTrack.muted;
+    }
+  }, [tracks]);
+
+  // Cleanup hidden audio on unmount
+  useEffect(() => {
+    return () => {
+      if (hiddenAudioRef.current) {
+        hiddenAudioRef.current.pause();
+        hiddenAudioRef.current.src = '';
+        if (hiddenAudioRef.current.parentNode) {
+          hiddenAudioRef.current.parentNode.removeChild(hiddenAudioRef.current);
+        }
+        hiddenAudioRef.current = null;
+      }
+    };
+  }, []);
 
   const { uppy, isDashboardOpen, setDashboardOpen, isTusEnabled, uploadProgress, uploadError } = useVideoUpload({
     onVideoSelected: (file: File) => {
@@ -419,6 +532,7 @@ export function EditorPage() {
               tracks={tracks}
               segments={segments}
               selectedSegmentId={selectedSegmentId}
+              selectedTrackIds={selectedTrackIds}
               duration={video?.duration ?? 0}
               playheadTime={playheadTime}
               trimStart={trimStart}
@@ -428,6 +542,8 @@ export function EditorPage() {
               onSelectSegment={selectSegment}
               onSetTrimStart={setTrimStart}
               onSetTrimEnd={setTrimEnd}
+              onToggleTrackMute={toggleTrackMute}
+              onSelectTrack={selectTrack}
             />
           </div>
 

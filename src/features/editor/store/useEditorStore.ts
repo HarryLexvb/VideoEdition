@@ -28,6 +28,9 @@ interface EditorStore extends EditorSnapshot {
   setPlayheadTime: (time: number) => void;
   seekTo: (time: number) => void;
   selectSegment: (segmentId: string | null) => void;
+  toggleTrackMute: (trackId: string) => void;
+  selectTrack: (trackId: string, multi?: boolean) => void;
+  clearTrackSelection: () => void;
   addCutAt: (time: number) => void;
   addCutAtPlayhead: () => void;
   setSegmentDisposition: (segmentId: string, disposition: SegmentDisposition) => void;
@@ -65,6 +68,7 @@ function snapshotFromState(state: EditorStore): EditorSnapshot {
     tracks: state.tracks.map((t) => ({ ...t })),
     segments: state.segments.map((segment) => ({ ...segment })),
     selectedSegmentId: state.selectedSegmentId,
+    selectedTrackIds: [...state.selectedTrackIds],
     playheadTime: state.playheadTime,
     trimStart: state.trimStart,
     trimEnd: state.trimEnd,
@@ -77,6 +81,7 @@ function cloneSnapshot(snapshot: EditorSnapshot): EditorSnapshot {
     tracks: snapshot.tracks.map((t) => ({ ...t })),
     segments: snapshot.segments.map((segment) => ({ ...segment })),
     selectedSegmentId: snapshot.selectedSegmentId,
+    selectedTrackIds: [...snapshot.selectedTrackIds],
     playheadTime: snapshot.playheadTime,
     trimStart: snapshot.trimStart,
     trimEnd: snapshot.trimEnd,
@@ -131,6 +136,7 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
   tracks: [],
   segments: createDefaultSegmentsForVideo(null),
   selectedSegmentId: null,
+  selectedTrackIds: [],
   playheadTime: 0,
   trimStart: null,
   trimEnd: null,
@@ -146,6 +152,7 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
       tracks: [createVideoTrack(video)],
       segments: createDefaultSegmentsForVideo(video),
       selectedSegmentId: null,
+      selectedTrackIds: [],
       playheadTime: 0,
       trimStart: null,
       trimEnd: null,
@@ -240,6 +247,34 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
       ...state,
       selectedSegmentId: segmentId,
     }));
+  },
+
+  toggleTrackMute: (trackId) => {
+    set((state) => {
+      const idx = state.tracks.findIndex((t) => t.id === trackId);
+      if (idx === -1) return state;
+      const updatedTracks = state.tracks.map((t, i) =>
+        i === idx ? { ...t, muted: !t.muted } : t,
+      );
+      return { ...state, tracks: updatedTracks };
+    });
+  },
+
+  selectTrack: (trackId, multi = false) => {
+    set((state) => {
+      if (multi) {
+        const already = state.selectedTrackIds.includes(trackId);
+        const next = already
+          ? state.selectedTrackIds.filter((id) => id !== trackId)
+          : [...state.selectedTrackIds, trackId];
+        return { ...state, selectedTrackIds: next };
+      }
+      return { ...state, selectedTrackIds: [trackId] };
+    });
+  },
+
+  clearTrackSelection: () => {
+    set((state) => ({ ...state, selectedTrackIds: [] }));
   },
 
   addCutAt: (time) => {
@@ -465,6 +500,7 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
           tracks: [],
           segments: createDefaultSegmentsForVideo(null),
           selectedSegmentId: null,
+          selectedTrackIds: [],
           playheadTime: 0,
           trimStart: null,
           trimEnd: null,
@@ -479,6 +515,7 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
         tracks: [createVideoTrack(state.video)],
         segments: createDefaultSegmentsForVideo(state.video),
         selectedSegmentId: null,
+        selectedTrackIds: [],
         playheadTime: 0,
         trimStart: null,
         trimEnd: null,
