@@ -36,7 +36,7 @@ export function VideoThumbnailStrip({ sourceUrl, duration, height = 72 }: VideoT
     video.src = sourceUrl;
     video.muted = true;
     video.preload = 'metadata';
-    video.crossOrigin = 'anonymous';
+    // Do NOT set crossOrigin for object URLs - it causes canvas taint errors
 
     const canvas = document.createElement('canvas');
     canvas.width = THUMB_WIDTH;

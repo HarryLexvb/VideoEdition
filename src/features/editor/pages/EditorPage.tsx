@@ -259,10 +259,17 @@ export function EditorPage() {
       setUiError(null);
       setUiMessage('Audio extraido localmente. El timeline ahora muestra la pista de video (miniaturas) y la pista de audio (forma de onda) por separado. El video esta silenciado y el audio suena desde la pista de audio.');
 
-      // If backend is configured, also send to backend for server-side processing
-      if (import.meta.env.VITE_API_BASE_URL) {
-        const payload = buildPayloadOrFail();
-        if (payload) {
+      // If backend is configured AND we have a valid uploadId, also send to backend.
+      // We build the payload manually here (without calling buildPayloadOrFail which shows errors)
+      // so that a missing uploadId never interrupts a successful local extraction.
+      const canCallBackend =
+        Boolean(import.meta.env.VITE_API_BASE_URL) &&
+        Boolean(video.uploadId) &&
+        video.duration > 0;
+
+      if (canCallBackend) {
+        try {
+          const payload = buildEditorJobPayload(video, segments, trimStart, trimEnd);
           extractAudioMutation.mutate(payload, {
             onSuccess: (response) => {
               setActiveJobContext({ action: 'extract-audio', jobId: response.jobId });
@@ -273,6 +280,8 @@ export function EditorPage() {
               setUiMessage('Audio extraido localmente. Backend no disponible para procesamiento servidor.');
             },
           });
+        } catch {
+          // Ignore payload build errors - local extraction already succeeded
         }
       }
     } else {
