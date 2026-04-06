@@ -1,216 +1,231 @@
 # VideoCut Studio
 
-Editor de video no destructivo con frontend React y backend Fastify para procesamiento con FFmpeg.
+Editor de video no destructivo con frontend React + Vite y backend Fastify opcional para procesamiento con FFmpeg.
 
-## Estado Actual (Verificado)
+## Autor
 
-Fecha de corte: 2026-04-04
+Harold Alejandro Villanueva Borda
+- Email personal: harrylex8@gmail.com
+- Email institucional: harold.villanueva@gmail.com
+- Repositorio: https://github.com/HarryLexvb/VideoEdition
 
-Clasificacion tecnica real:
-- Frontend: funcional para carga, preview, timeline, trim, segmentos e historial.
-- Backend: parcial operativo (MVP), con API real, jobs y salida de archivos.
-- Infra de upload: funcional con Tus (`tusd`) cuando `api` y `tusd` corren en la misma red Docker.
+---
 
-No es correcto describir este repo como frontend-only.
+## Estado actual
 
-## Resumen Ejecutivo Para El Equipo
+Fecha de corte: 2026-04-06
 
-Logros confirmados:
-- Flujo completo de upload + export + extract-audio funcional.
-- Contrato frontend/backend operativo en endpoints de jobs.
-- Descarga de resultados validada (`/results/:filename`).
-- Problemas criticos recientes de ejecucion corregidos.
+### Frontend (este repositorio raiz)
 
-Situacion productiva:
-- Proyecto usable para demo tecnica y pruebas de flujo.
-- Aun no listo para produccion (sin auth, sin DB, sin cola persistente, sin endurecimiento).
+Funcional y construible sin backend:
 
-## Arquitectura Real Del Repositorio
+- Carga de video local con Uppy (drag & drop o file picker)
+- Upload reanudable con Tus (requiere VITE_TUS_ENDPOINT)
+- Preview de video nativo (HTMLVideoElement, sin Plyr dependency)
+- Timeline con pistas diferenciadas:
+  - Pista de video: muestra tira de miniaturas/fotogramas generados con Canvas API
+  - Pista de audio: muestra forma de onda generada con Web Audio API (OfflineAudioContext)
+- Extraccion de audio LOCAL (sin backend): crea pista de audio visual en el timeline, silencia el video, sin audio doble en la preview
+- Segmentos keep/remove con historial undo/redo
+- Trim range visual en timeline
+- Teclas de atajo: Ctrl+Z / Ctrl+Shift+Z
+
+### Backend (apps/api)
+
+Fastify + FFmpeg. Operativo como MVP. Requerido solo para exportacion y extraccion server-side.
+
+- POST /jobs/export
+- POST /jobs/extract-audio
+- GET /jobs/:jobId
+- GET /results/:filename
+- GET /health
+
+---
+
+## Stack real
 
 ### Frontend
-- React + Vite + TypeScript.
-- Estado local con Zustand.
-- Integracion API con React Query.
-- Upload con Uppy + Tus opcional.
+
+| Capa | Tecnologia |
+|------|-----------|
+| Framework | React 19 |
+| Bundler | Vite 8 |
+| Lenguaje | TypeScript 5.9 |
+| Estado | Zustand 5 |
+| API async | TanStack React Query 5 |
+| Upload | Uppy 5 + Tus |
+| Estilos | Tailwind CSS 3 |
+| Iconos | Lucide React |
+| Thumbnails | Canvas API (nativo) |
+| Waveform | Web Audio API OfflineAudioContext (nativo) |
+| Router | React Router DOM 6 |
 
 ### Backend
-- Fastify (`apps/api/src/server.ts`).
-- Rutas:
-  - `GET /health`
-  - `POST /jobs/export`
-  - `POST /jobs/extract-audio`
-  - `GET /jobs/:jobId`
-  - `GET /results/:filename`
-  - `POST /hooks/upload`
-- Procesamiento con FFmpeg (`apps/api/src/services/ffmpeg.ts`).
-- Storage local (`uploads`, `results`, `temp`).
-- Job store en memoria (`apps/api/src/services/jobStore.ts`).
 
-### Infra Upload
-- `tusd` en Docker Compose.
-- Hook configurado a `http://api:3000/hooks/upload`.
-- Implicacion: para upload reanudable funcional, `api` y `tusd` deben convivir en la red de Compose.
+| Capa | Tecnologia |
+|------|-----------|
+| Framework | Fastify |
+| Procesamiento | FFmpeg (ffmpeg-static) |
+| Upload server | tusd |
+| Jobs | En memoria (sin DB) |
 
-## Incidentes Recientes Resueltos
+---
 
-### 1) Upload completaba mal y faltaba `source.uploadId`
-Sintoma:
-- UI mostraba errores como `El campo source.uploadId es requerido` al exportar/extract.
+## Arquitectura de pistas en el timeline
 
-Causa raiz:
-- `tusd` corria en Docker, `api` corria local.
-- Hook de `tusd` apuntaba a `http://api:3000/hooks/upload` (host no resolvible fuera de red Docker).
+Cuando se carga un video:
 
-Correccion aplicada:
-- Ejecucion recomendada: frontend local + `docker compose up -d api tusd`.
-- Guard en frontend para bloquear envio de jobs si no existe `uploadId`.
+```
+Timeline
+ [VIDEO] [████ fotograma ████ fotograma ████ fotograma ████]  <- Canvas thumbnails
+```
 
-Estado:
-- Resuelto y validado.
+Cuando se extrae audio (accion local, sin backend):
 
-### 2) Preview y timeline quedaban en gris/estaticos
-Sintoma:
-- Video subia, pero no reproducia en preview y timeline no reaccionaba.
+```
+Timeline
+ [VIDEO] [████ fotograma ████ fotograma ████ fotograma ████]  <- Canvas thumbnails (muted)
+ [AUDIO] [~~~~~forma de onda Web Audio API~~~~~~~~~~~~~~~~~]  <- OfflineAudioContext
+```
 
-Causa raiz:
-- Inicializacion inestable del preview y falta de reinicializacion consistente del timeline por cambio de source.
+Comportamiento:
+- Video track muted = true: no suena desde el elemento video
+- Audio track muted = false: el waveform es solo visual; el sonido viene del mismo elemento video
+  (la pista de audio en el timeline es una representacion visual de que el audio fue separado)
+- Sin audio doble: el video element permanece como unica fuente de reproduccion
+- Sincronizacion: el playhead de ambas pistas sigue el currentTime del video element
 
-Correccion aplicada:
-- Flujo de preview estabilizado con `video` nativo.
-- Timeline reinicializado por URL de media activa.
+---
 
-Estado:
-- Resuelto y validado.
+## Como ejecutar
 
-## Validacion Tecnica Ejecutada
+### Opcion A - Solo frontend (sin backend)
 
-Validaciones reales realizadas el 2026-04-04:
-- `npm run typecheck` (frontend): OK.
-- `npm run build` en `apps/api`: OK.
-- `GET /health`: 200 OK.
-- Upload Tus minimo de prueba: creacion y patch OK.
-- Hooks `tusd -> api`: eventos recibidos en `/hooks/upload`.
-- E2E con video real del usuario:
-  - Export job: `completed` + descarga MP4.
-  - Extract-audio job: `completed` + descarga MP3.
-
-## Como Ejecutar Correctamente
-
-### Opcion A - Solo Frontend
-
-Uso: UI/UX sin procesamiento real backend.
+Funcionalidades disponibles: carga, preview, timeline, extraccion de audio local, segmentos, trim, historial.
 
 ```bash
 npm install
 npm run dev
 ```
 
-URL: `http://localhost:5173`
+URL: http://localhost:5173
 
-### Opcion B - Recomendada Para Flujo Completo Local
+### Opcion B - Frontend + backend en Docker (flujo completo)
 
-Frontend local + API/Tusd en Docker.
+Funcionalidades adicionales: exportacion con FFmpeg, extraccion de audio server-side, descarga de resultados.
 
-1. Instalar frontend:
+1. Configurar variables de entorno en la raiz:
 
-```bash
-npm install
 ```
-
-2. Configurar `.env` en raiz:
-
-```bash
 VITE_API_BASE_URL=http://localhost:3000
 VITE_TUS_ENDPOINT=http://localhost:1080/files/
 ```
 
-3. Levantar servicios:
+2. Levantar servicios:
 
 ```bash
-# Terminal 1
+# Terminal 1 - frontend
+npm install
 npm run dev
 
-# Terminal 2
+# Terminal 2 - api + tusd
 docker compose up -d api tusd
 ```
 
-### Opcion C - Stack Completo Docker
+### Opcion C - Stack completo Docker
 
 ```bash
 docker compose up --build
 ```
 
 Servicios:
-- Web: `http://localhost`
-- API: `http://localhost:3000`
-- Tusd: `http://localhost:1080/files/`
+- Web: http://localhost
+- API: http://localhost:3000
+- Tusd: http://localhost:1080/files/
 
-## Variables De Entorno
-
-### Frontend (raiz)
-- `VITE_API_BASE_URL`
-- `VITE_TUS_ENDPOINT`
-
-Referencia: `.env.example`
-
-### Backend (`apps/api`)
-- `PORT`, `HOST`
-- `UPLOADS_DIR`, `RESULTS_DIR`, `TEMP_DIR`
-- `FFMPEG_PATH`, `FFPROBE_PATH`
-- `CORS_ORIGIN`
-- `PUBLIC_API_URL`
-
-Referencia: `apps/api/.env.example`
+---
 
 ## Scripts
 
-Raiz:
-- `npm run dev`
-- `npm run dev:open`
-- `npm run typecheck`
-- `npm run build`
-- `npm run preview`
+| Script | Descripcion |
+|--------|-------------|
+| `npm run dev` | Inicia servidor de desarrollo Vite |
+| `npm run dev:open` | Inicia y abre browser |
+| `npm run typecheck` | Verificacion de tipos TypeScript |
+| `npm run build` | Typecheck + build de produccion |
+| `npm run preview` | Preview del build de produccion |
 
-`apps/api`:
-- `npm run dev`
-- `npm run build`
-- `npm run start`
+Backend (`apps/api`):
 
-## Estado Funcional (Que Ya Hace)
+| Script | Descripcion |
+|--------|-------------|
+| `npm run dev` | Inicia con ts-node-dev |
+| `npm run build` | Compila TypeScript |
+| `npm run start` | Inicia build compilado |
 
-Implementado:
-- Carga de video local.
-- Upload reanudable Tus.
-- Preview de video.
-- Timeline y segmentos keep/remove.
-- Trim range visual y acciones de historial.
-- Creacion de jobs backend.
-- Polling de estado de jobs.
-- Descarga de resultados procesados.
+---
 
-## Deuda Tecnica Y Faltantes
+## Variables de entorno
 
-Pendiente para siguiente fase:
-- Autenticacion/autorizacion.
-- Persistencia real de jobs (hoy en memoria).
-- Base de datos para proyectos/historial.
-- Cola de trabajo (BullMQ + Redis) para robustez y escalado.
-- Validacion de schema en runtime para payloads.
-- Timeout y politicas de reintento de polling en frontend.
-- Endurecimiento de seguridad y observabilidad.
+### Frontend (raiz del proyecto)
 
-## Prioridad Recomendada (Proxima Iteracion)
+| Variable | Descripcion | Requerida |
+|----------|-------------|-----------|
+| VITE_API_BASE_URL | URL base del backend Fastify | No (solo para jobs backend) |
+| VITE_TUS_ENDPOINT | URL del servidor tusd | No (solo para upload reanudable) |
 
-1. Implementar timeout de polling y UX de reintento.
-2. Migrar job store en memoria a cola persistente.
-3. Agregar validacion de payloads en backend.
-4. Agregar persistencia de metadata de jobs/resultados.
-5. Agregar autenticacion minima para endpoints de procesamiento.
+Referencia: `.env.example`
 
-## Documentacion Relacionada
+### Backend (apps/api)
+
+| Variable | Default | Descripcion |
+|----------|---------|-------------|
+| PORT | 3000 | Puerto del servidor |
+| HOST | 0.0.0.0 | Host de escucha |
+| UPLOADS_DIR | ./uploads | Directorio de archivos subidos |
+| RESULTS_DIR | ./results | Directorio de resultados |
+| TEMP_DIR | ./temp | Directorio temporal |
+| FFMPEG_PATH | auto | Ruta a ffmpeg |
+| CORS_ORIGIN | * | Origen permitido en CORS |
+| PUBLIC_API_URL | - | URL publica del API para resultUrl |
+
+---
+
+## Funcionalidades implementadas
+
+- [x] Carga de video (local, drag & drop)
+- [x] Upload reanudable Tus (opcional)
+- [x] Preview de video nativo
+- [x] Pista de video en timeline con miniaturas Canvas API
+- [x] Extraccion de audio LOCAL (sin backend): pista de audio con waveform Web Audio API
+- [x] Sin audio doble en preview tras extraccion
+- [x] Segmentos keep/remove en timeline
+- [x] Corte en cabezal
+- [x] Trim range visual
+- [x] Historial undo/redo
+- [x] Modo oscuro / claro
+- [x] Jobs de exportacion y extraccion en backend (opcional)
+- [x] Polling de estado de jobs
+- [x] Descarga de resultados procesados
+
+## Deuda tecnica pendiente
+
+- Autenticacion/autorizacion
+- Persistencia de jobs (hoy en memoria)
+- Cola de trabajo BullMQ + Redis para robustez
+- Validacion de schema en runtime (Zod)
+- Timeout y politica de reintentos en polling
+- Endurecimiento de seguridad y observabilidad
+- Tests unitarios e integration
+
+---
+
+## Documentacion relacionada
 
 - Contrato API: `docs/contracts/api.md`
-- Plan y registro de correcciones: `PROJECT_FIX_PLAN.md`
+- Plan de correcciones: `PROJECT_FIX_PLAN.md`
+
+---
 
 ## Licencia
 

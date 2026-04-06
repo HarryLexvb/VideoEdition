@@ -30,6 +30,7 @@ export function EditorPage() {
   const lastHandledJobStatusRef = useRef<string | null>(null);
 
   const video = useEditorStore((state) => state.video);
+  const tracks = useEditorStore((state) => state.tracks);
   const segments = useEditorStore((state) => state.segments);
   const selectedSegmentId = useEditorStore((state) => state.selectedSegmentId);
   const playheadTime = useEditorStore((state) => state.playheadTime);
@@ -39,6 +40,7 @@ export function EditorPage() {
   const future = useEditorStore((state) => state.future);
   const uploadState = useEditorStore((state) => state.uploadState);
   const uploadMessage = useEditorStore((state) => state.uploadMessage);
+  const audioExtracted = useEditorStore((state) => state.audioExtracted);
 
   const setVideo = useEditorStore((state) => state.setVideo);
   const setVideoDuration = useEditorStore((state) => state.setVideoDuration);
@@ -57,6 +59,7 @@ export function EditorPage() {
   const undo = useEditorStore((state) => state.undo);
   const redo = useEditorStore((state) => state.redo);
   const resetProject = useEditorStore((state) => state.resetProject);
+  const extractAudioLocally = useEditorStore((state) => state.extractAudioLocally);
 
   const historyPast = useMemo(() => past.map((record) => record.history), [past]);
   const historyFuture = useMemo(() => future.map((record) => record.history), [future]);
@@ -68,24 +71,29 @@ export function EditorPage() {
   const extractAudioMutation = useStartExtractAudioJob();
   const jobStatusQuery = useProcessingJob(activeJobContext?.jobId ?? null);
 
-  // Estabilizar callback de setMediaElement para evitar re-renders en VideoPlayer
   const setMediaElement = useCallback((element: HTMLVideoElement | null) => {
     setMediaElementState(element);
   }, []);
 
-  // Estabilizar callback de onTimeUpdate
   const handleTimeUpdate = useCallback((time: number) => {
     setPlayheadTime(time);
   }, [setPlayheadTime]);
 
-  // Estabilizar callback de onDurationChange
   const handleDurationChange = useCallback((duration: number) => {
     setVideoDuration(duration);
   }, [setVideoDuration]);
 
+  // Mute/unmute the video element based on the video track's muted state
+  useEffect(() => {
+    if (!mediaElement) return;
+    const videoTrack = tracks.find((t) => t.kind === 'video');
+    if (videoTrack) {
+      mediaElement.muted = videoTrack.muted;
+    }
+  }, [mediaElement, tracks]);
+
   const { uppy, isDashboardOpen, setDashboardOpen, isTusEnabled, uploadProgress, uploadError } = useVideoUpload({
     onVideoSelected: (file: File) => {
-      // Revocar URL anterior si existe
       if (previousObjectUrlRef.current) {
         URL.revokeObjectURL(previousObjectUrlRef.current);
         previousObjectUrlRef.current = null;
@@ -106,8 +114,8 @@ export function EditorPage() {
       });
 
       setUiError(null);
-      setUiMessage('Video cargado correctamente. El timeline se está generando automáticamente.');
-      
+      setUiMessage('Video cargado. El timeline se esta generando automaticamente.');
+
       setTimeout(() => setDashboardOpen(false), 300);
     },
     onUploadIdReceived: setVideoUploadId,
@@ -115,11 +123,11 @@ export function EditorPage() {
   });
 
   useEffect(() => {
-    console.log('[EditorPage] mediaElement actualizado:', mediaElement ? 'Video element disponible' : 'null');
+    console.log('[EditorPage] mediaElement:', mediaElement ? 'disponible' : 'null');
     console.log('[EditorPage] Video en store:', video ? `${video.fileName} (${video.duration}s)` : 'null');
-  }, [mediaElement, video]);
+    console.log('[EditorPage] Pistas:', tracks.map((t) => `${t.kind}:${t.muted ? 'muted' : 'audio-on'}`).join(', '));
+  }, [mediaElement, video, tracks]);
 
-  // Cleanup de object URL al desmontar
   useEffect(() => {
     return () => {
       if (previousObjectUrlRef.current) {
@@ -129,7 +137,6 @@ export function EditorPage() {
     };
   }, []);
 
-  // Keyboard shortcuts para undo/redo
   useEffect(() => {
     function handleKeyboardShortcuts(event: KeyboardEvent): void {
       const isMetaOrControl = event.metaKey || event.ctrlKey;
@@ -152,7 +159,6 @@ export function EditorPage() {
     };
   }, [redo, undo]);
 
-  // Job status polling
   useEffect(() => {
     const jobStatus = jobStatusQuery.data;
     if (!jobStatus) {
@@ -186,7 +192,7 @@ export function EditorPage() {
 
     if (isTusEnabled && !video.uploadId) {
       if (uploadState === 'uploading') {
-        setUiError('La subida aun esta en progreso. Espera a que Upload llegue a 100% antes de exportar o extraer audio.');
+        setUiError('La subida aun esta en progreso. Espera a que llegue al 100% antes de exportar.');
       } else {
         setUiError('No se obtuvo uploadId del archivo. Vuelve a subir el video para continuar.');
       }
@@ -222,24 +228,56 @@ export function EditorPage() {
     });
   }
 
-  function runExtractAudioJob(): void {
-    const payload = buildPayloadOrFail();
-    if (!payload) {
+  /**
+   * "Extract Audio" has two modes:
+   * 1. LOCAL (no backend required): Always runs first. Creates a visual audio track in the
+   *    timeline from the same source file. Video track gets muted. No backend call needed.
+   * 2. BACKEND: If a backend API is configured, also sends to backend for server-side extraction.
+   *
+   * This ensures the feature always works even without a backend.
+   */
+  function runExtractAudio(): void {
+    if (!video) {
+      setUiError('Carga un video primero para extraer su audio.');
       return;
     }
 
-    setUiError(null);
-    setUiMessage('Solicitando extraccion de audio al backend...');
+    if (video.duration <= 0) {
+      setUiError('Esperando metadata del video. Intenta nuevamente en unos segundos.');
+      return;
+    }
 
-    extractAudioMutation.mutate(payload, {
-      onSuccess: (response) => {
-        setActiveJobContext({ action: 'extract-audio', jobId: response.jobId });
-        setUiMessage('Extraccion de audio enviada. Seguimiento activo por polling.');
-      },
-      onError: (error) => {
-        setUiError(error.message);
-      },
-    });
+    if (audioExtracted) {
+      setUiError('El audio ya fue extraido. Resetea el proyecto para volver al estado original.');
+      return;
+    }
+
+    // Check that the video likely has audio (heuristic: assume it does unless it's muted-only format)
+    // We cannot truly check without decoding, so we proceed optimistically.
+    const success = extractAudioLocally();
+    if (success) {
+      setUiError(null);
+      setUiMessage('Audio extraido localmente. El timeline ahora muestra la pista de video (miniaturas) y la pista de audio (forma de onda) por separado. El video esta silenciado y el audio suena desde la pista de audio.');
+
+      // If backend is configured, also send to backend for server-side processing
+      if (import.meta.env.VITE_API_BASE_URL) {
+        const payload = buildPayloadOrFail();
+        if (payload) {
+          extractAudioMutation.mutate(payload, {
+            onSuccess: (response) => {
+              setActiveJobContext({ action: 'extract-audio', jobId: response.jobId });
+              setUiMessage('Audio extraido localmente + tarea backend iniciada. Seguimiento activo por polling.');
+            },
+            onError: () => {
+              // Backend failed but local extraction succeeded - don't show error
+              setUiMessage('Audio extraido localmente. Backend no disponible para procesamiento servidor.');
+            },
+          });
+        }
+      }
+    } else {
+      setUiError('No se pudo extraer el audio. Asegurate de tener un video cargado.');
+    }
   }
 
   return (
@@ -256,9 +294,10 @@ export function EditorPage() {
           activeJob={activeJobData}
           exporting={exportMutation.isPending}
           extractingAudio={extractAudioMutation.isPending}
+          audioExtracted={audioExtracted}
           onOpenUploader={() => setDashboardOpen(true)}
           onExport={runExportJob}
-          onExtractAudio={runExtractAudioJob}
+          onExtractAudio={runExtractAudio}
           onResetProject={resetProject}
         />
 
@@ -276,7 +315,6 @@ export function EditorPage() {
                 </button>
               </div>
 
-              {/* Instrucciones visuales mejoradas */}
               <div className="border-b border-slate-200 bg-gradient-to-br from-brand-50/50 to-cyan-50/30 p-6 dark:border-slate-700 dark:from-brand-950/20 dark:to-cyan-950/10">
                 <div className="flex items-start gap-4">
                   <div className="rounded-xl bg-brand-100 p-3 dark:bg-brand-900/40">
@@ -284,15 +322,15 @@ export function EditorPage() {
                   </div>
                   <div className="flex-1">
                     <h3 className="font-display text-lg font-semibold text-slate-900 dark:text-slate-100">
-                      Arrastra tu video aquí o haz click abajo
+                      Arrastra tu video aqui o haz click abajo
                     </h3>
                     <p className="mt-1 flex items-center gap-1.5 text-sm text-slate-600 dark:text-slate-400">
                       <MousePointerClick className="h-4 w-4" aria-hidden="true" />
-                      <span>Haz <strong>click en el área gris de abajo</strong> o arrastra un archivo</span>
+                      <span>Haz <strong>click en el area gris de abajo</strong> o arrastra un archivo</span>
                     </p>
                     <div className="mt-3 flex flex-wrap gap-2">
                       <span className="rounded-lg bg-white px-2.5 py-1 text-xs font-medium text-slate-700 ring-1 ring-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:ring-slate-700">
-                        Máximo 2 GB
+                        Maximo 2 GB
                       </span>
                       <span className="rounded-lg bg-white px-2.5 py-1 text-xs font-medium text-slate-700 ring-1 ring-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:ring-slate-700">
                         MP4, WebM, MOV
@@ -303,7 +341,6 @@ export function EditorPage() {
                 </div>
               </div>
 
-              {/* Dashboard de Uppy - Configuración correcta */}
               <div className="p-5">
                 <Dashboard
                   uppy={uppy}
@@ -311,13 +348,13 @@ export function EditorPage() {
                   hideProgressDetails={false}
                   hideUploadButton={!isTusEnabled}
                   height={350}
-                  note="💡 Haz click en esta área o arrastra tu video aquí"
+                  note="Haz click en esta area o arrastra tu video aqui"
                   locale={{
                     strings: {
-                      dropPasteBoth: 'Suelta tu video aquí o %{browseFiles}',
-                      dropPasteFiles: 'Suelta tu video aquí o %{browseFiles}',
+                      dropPasteBoth: 'Suelta tu video aqui o %{browseFiles}',
+                      dropPasteFiles: 'Suelta tu video aqui o %{browseFiles}',
                       browseFiles: 'haz click para seleccionar',
-                      dropHint: 'Arrastra tu video aquí',
+                      dropHint: 'Arrastra tu video aqui',
                     },
                   }}
                 />
@@ -370,7 +407,7 @@ export function EditorPage() {
 
             <TimelinePanel
               mediaElement={mediaElement}
-              mediaSourceUrl={video?.localUrl ?? null}
+              tracks={tracks}
               segments={segments}
               selectedSegmentId={selectedSegmentId}
               duration={video?.duration ?? 0}
@@ -415,7 +452,7 @@ export function EditorPage() {
 
         <footer className="mt-6 rounded-2xl border border-white/60 bg-white/70 p-4 text-xs text-slate-500 dark:border-slate-700/50 dark:bg-slate-800/70 dark:text-slate-400">
           <p>
-            Editor de video no destructivo: visualiza cortes, gestiona segmentos y prepara operaciones para procesamiento futuro.
+            Editor de video no destructivo: visualiza cortes, gestiona segmentos y prepara operaciones para procesamiento.
           </p>
           <p className="mt-1">
             Job activo: {activeJobContext ? `${activeJobContext.action} (${activeJobContext.jobId})` : 'ninguno'}
@@ -423,6 +460,9 @@ export function EditorPage() {
             Estado query: {jobStatusQuery.isFetching ? 'consultando' : 'estable'}
             {' · '}
             Media: {mediaElement ? 'conectado' : 'desconectado'}
+            {' · '}
+            Pistas: {tracks.length}
+            {audioExtracted ? ' · Audio extraido' : ''}
           </p>
           {!isTusEnabled ? <StatusBadge className="mt-2">Tus pendiente de configurar en entorno</StatusBadge> : null}
         </footer>

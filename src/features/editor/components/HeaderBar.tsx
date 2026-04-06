@@ -18,6 +18,7 @@ interface HeaderBarProps {
   activeJob: JobStatusResponse | null;
   exporting: boolean;
   extractingAudio: boolean;
+  audioExtracted: boolean;
   onOpenUploader: () => void;
   onExport: () => void;
   onExtractAudio: () => void;
@@ -67,6 +68,7 @@ export function HeaderBar({
   activeJob,
   exporting,
   extractingAudio,
+  audioExtracted,
   onOpenUploader,
   onExport,
   onExtractAudio,
@@ -112,9 +114,15 @@ export function HeaderBar({
             <Download className="h-4 w-4" aria-hidden="true" />
             Exportar
           </Button>
-          <Button variant="secondary" onClick={onExtractAudio} loading={extractingAudio} disabled={!video || exporting}>
+          <Button
+            variant="secondary"
+            onClick={onExtractAudio}
+            loading={extractingAudio}
+            disabled={!video || exporting || audioExtracted}
+            title={audioExtracted ? 'Audio ya extraido - resetea el proyecto para volver al estado original' : 'Extraer audio del video'}
+          >
             <AudioLines className="h-4 w-4" aria-hidden="true" />
-            Extraer audio
+            {audioExtracted ? 'Audio extraido' : 'Extraer audio'}
           </Button>
           <Button variant="ghost" onClick={onResetProject} disabled={!video}>
             <RotateCcw className="h-4 w-4" aria-hidden="true" />

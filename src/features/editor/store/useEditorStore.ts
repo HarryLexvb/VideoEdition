@@ -6,6 +6,7 @@ import { clampTime, createInitialSegment, normalizeSegmentsForDuration, splitSeg
 import type {
   EditorSnapshot,
   HistoryRecord,
+  MediaTrack,
   SegmentDisposition,
   SnapshotRecord,
   TimelineSegment,
@@ -18,6 +19,8 @@ interface EditorStore extends EditorSnapshot {
   future: SnapshotRecord[];
   uploadState: UploadState;
   uploadMessage: string | null;
+  audioExtracted: boolean;
+
   setVideo: (video: VideoAsset) => void;
   setVideoDuration: (duration: number) => void;
   setVideoUploadId: (uploadId: string) => void;
@@ -37,6 +40,12 @@ interface EditorStore extends EditorSnapshot {
   setTrimEndAtPlayhead: () => void;
   clearTrimRange: () => void;
   validateTrimRange: () => boolean;
+  /**
+   * Locally extract audio: creates a dedicated audio track from the same video source.
+   * The video track is muted. Both tracks are shown in the timeline.
+   * Returns true if extraction succeeded, false if conditions are not met.
+   */
+  extractAudioLocally: () => boolean;
   resetProject: () => void;
   undo: () => void;
   redo: () => void;
@@ -53,6 +62,7 @@ function createHistoryRecord(label: string): HistoryRecord {
 function snapshotFromState(state: EditorStore): EditorSnapshot {
   return {
     video: state.video ? { ...state.video } : null,
+    tracks: state.tracks.map((t) => ({ ...t })),
     segments: state.segments.map((segment) => ({ ...segment })),
     selectedSegmentId: state.selectedSegmentId,
     playheadTime: state.playheadTime,
@@ -64,6 +74,7 @@ function snapshotFromState(state: EditorStore): EditorSnapshot {
 function cloneSnapshot(snapshot: EditorSnapshot): EditorSnapshot {
   return {
     video: snapshot.video ? { ...snapshot.video } : null,
+    tracks: snapshot.tracks.map((t) => ({ ...t })),
     segments: snapshot.segments.map((segment) => ({ ...segment })),
     selectedSegmentId: snapshot.selectedSegmentId,
     playheadTime: snapshot.playheadTime,
@@ -104,8 +115,20 @@ function createDefaultSegmentsForVideo(video: VideoAsset | null): TimelineSegmen
   return [createInitialSegment(video?.duration ?? 0)];
 }
 
+function createVideoTrack(video: VideoAsset): MediaTrack {
+  return {
+    id: createId('track-video'),
+    kind: 'video',
+    label: video.fileName,
+    sourceUrl: video.localUrl,
+    duration: video.duration,
+    muted: false,
+  };
+}
+
 export const useEditorStore = create<EditorStore>((set, get) => ({
   video: null,
+  tracks: [],
   segments: createDefaultSegmentsForVideo(null),
   selectedSegmentId: null,
   playheadTime: 0,
@@ -115,10 +138,12 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
   future: [],
   uploadState: 'idle',
   uploadMessage: null,
+  audioExtracted: false,
 
   setVideo: (video) => {
     set({
       video,
+      tracks: [createVideoTrack(video)],
       segments: createDefaultSegmentsForVideo(video),
       selectedSegmentId: null,
       playheadTime: 0,
@@ -128,6 +153,7 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
       future: [],
       uploadState: video.uploadId ? 'uploaded' : 'idle',
       uploadMessage: null,
+      audioExtracted: false,
     });
   },
 
@@ -143,12 +169,20 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
         duration: safeDuration,
       };
 
+      // Update duration on the video track too
+      const updatedTracks = state.tracks.map((t) =>
+        t.kind === 'video' && t.sourceUrl === state.video!.localUrl
+          ? { ...t, duration: safeDuration }
+          : t,
+      );
+
       const updatedSegments = normalizeSegmentsForDuration(state.segments, safeDuration);
       const updatedPlayhead = clampTime(state.playheadTime, safeDuration);
 
       return {
         ...state,
         video: updatedVideo,
+        tracks: updatedTracks,
         segments: updatedSegments,
         playheadTime: updatedPlayhead,
       };
@@ -375,11 +409,60 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
     return state.trimStart < state.trimEnd;
   },
 
+  extractAudioLocally: () => {
+    const state = get();
+
+    if (!state.video) {
+      console.warn('[EditorStore] extractAudioLocally: no video loaded');
+      return false;
+    }
+
+    if (state.audioExtracted) {
+      console.warn('[EditorStore] extractAudioLocally: audio already extracted');
+      return false;
+    }
+
+    const videoTrackIndex = state.tracks.findIndex((t) => t.kind === 'video');
+    if (videoTrackIndex === -1) {
+      console.warn('[EditorStore] extractAudioLocally: no video track found');
+      return false;
+    }
+
+    const videoTrack = state.tracks[videoTrackIndex];
+
+    // Mute the video track
+    const mutedVideoTrack: MediaTrack = { ...videoTrack, muted: true };
+
+    // Create an audio track using the same source URL
+    // The browser will decode only the audio from the video file
+    const audioTrack: MediaTrack = {
+      id: createId('track-audio'),
+      kind: 'audio',
+      label: `Audio - ${state.video.fileName}`,
+      sourceUrl: state.video.localUrl,
+      duration: state.video.duration,
+      muted: false,
+    };
+
+    const updatedTracks = [...state.tracks];
+    updatedTracks[videoTrackIndex] = mutedVideoTrack;
+    updatedTracks.push(audioTrack);
+
+    set({
+      ...state,
+      tracks: updatedTracks,
+      audioExtracted: true,
+    });
+
+    return true;
+  },
+
   resetProject: () => {
     set((state) => {
       if (!state.video) {
         return {
           ...state,
+          tracks: [],
           segments: createDefaultSegmentsForVideo(null),
           selectedSegmentId: null,
           playheadTime: 0,
@@ -387,11 +470,13 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
           trimEnd: null,
           past: [],
           future: [],
+          audioExtracted: false,
         };
       }
 
       return {
         ...state,
+        tracks: [createVideoTrack(state.video)],
         segments: createDefaultSegmentsForVideo(state.video),
         selectedSegmentId: null,
         playheadTime: 0,
@@ -399,6 +484,7 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
         trimEnd: null,
         past: [],
         future: [],
+        audioExtracted: false,
       };
     });
   },
