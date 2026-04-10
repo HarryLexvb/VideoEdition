@@ -16,8 +16,8 @@ services:
       UPLOADS_DIR: /app/uploads
       RESULTS_DIR: /app/results
       TEMP_DIR: /app/temp
-      CORS_ORIGIN: 'https://tudominio.com'
-      PUBLIC_API_URL: 'https://tudominio.com/api'
+      CORS_ORIGIN: '*'
+      PUBLIC_API_URL: 'http://localhost:3000'
     depends_on:
       - tusd
     restart: unless-stopped

@@ -2,7 +2,7 @@ import { FastifyInstance } from 'fastify';
 import { v4 as uuidv4 } from 'uuid';
 import { config } from '../config';
 import { jobStore } from '../services/jobStore';
-import { exportVideo, extractAudio } from '../services/ffmpeg';
+import { exportVideo, extractAudioSegments } from '../services/ffmpeg';
 import { Job, JobPayload } from '../types';
 
 export async function jobRoutes(fastify: FastifyInstance): Promise<void> {
@@ -77,6 +77,7 @@ export async function jobRoutes(fastify: FastifyInstance): Promise<void> {
       status: job.status,
       progress: job.progress,
       resultUrl: job.resultUrl,
+      resultUrls: job.resultUrls,
       error: job.error,
     });
   });
@@ -101,22 +102,29 @@ async function processJob(
       jobStore.update(jobId, { progress: p });
     };
 
-    let resultFilename: string;
-
     if (type === 'export') {
-      resultFilename = await exportVideo(uploadId, timeline, onProgress);
+      const resultFilename = await exportVideo(uploadId, timeline, onProgress);
+      jobStore.update(jobId, {
+        status: 'completed',
+        progress: 100,
+        resultUrl: `${config.publicUrl}/results/${resultFilename}`,
+      });
     } else {
-      resultFilename = await extractAudio(uploadId, timeline, onProgress);
+      // Exportar cada segmento 'keep' como un MP3 independiente
+      const segmentResults = await extractAudioSegments(uploadId, timeline, onProgress);
+      const resultUrls = segmentResults.map(
+        (r) => `${config.publicUrl}/results/${r.filename}`,
+      );
+      jobStore.update(jobId, {
+        status: 'completed',
+        progress: 100,
+        // resultUrl apunta al primer segmento para compatibilidad con clientes que no soporten resultUrls
+        resultUrl: resultUrls[0],
+        resultUrls,
+      });
     }
 
-    // resultUrl absoluto para que el frontend pueda abrirlo directamente
-    jobStore.update(jobId, {
-      status: 'completed',
-      progress: 100,
-      resultUrl: `${config.publicUrl}/results/${resultFilename}`,
-    });
-
-    fastify.log.info({ jobId, resultFilename }, 'Job completado');
+    fastify.log.info({ jobId }, 'Job completado');
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Error desconocido en el procesamiento';
     fastify.log.error({ jobId, message }, 'Job fallido');

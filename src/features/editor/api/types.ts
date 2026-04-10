@@ -11,6 +11,8 @@ export interface JobStatusResponse {
   status: ProcessingStatus;
   progress?: number;
   resultUrl?: string;
+  /** URLs de cada segmento de audio exportado (extract-audio con múltiples segmentos) */
+  resultUrls?: string[];
   error?: string;
   message?: string;
 }

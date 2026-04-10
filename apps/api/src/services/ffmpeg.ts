@@ -5,6 +5,38 @@ import { config } from '../config';
 import { TimelineSegment } from '../types';
 import { getUploadPath, getTempPath, getResultPath, cleanupFiles } from '../storage/local';
 
+/**
+ * Convierte segundos a etiqueta legible para nombres de archivo.
+ * < 60s → "segundo_NN", >= 60s → "minuto_MM_SS"
+ */
+function formatTimeLabel(seconds: number): string {
+  const floored = Math.floor(seconds);
+  if (floored < 60) {
+    return `segundo_${floored.toString().padStart(2, '0')}`;
+  }
+  const m = Math.floor(floored / 60);
+  const s = floored % 60;
+  return `minuto_${m.toString().padStart(2, '0')}_${s.toString().padStart(2, '0')}`;
+}
+
+/**
+ * Construye el nombre de archivo para un segmento de audio exportado.
+ * Ejemplo: audio_01_segundo_12_a_segundo_18.mp3
+ */
+function buildAudioSegmentFilename(index: number, start: number, end: number): string {
+  const idx = (index + 1).toString().padStart(2, '0');
+  const startLabel = formatTimeLabel(start);
+  const endLabel = formatTimeLabel(end);
+  return `audio_${idx}_${startLabel}_a_${endLabel}.mp3`;
+}
+
+export interface AudioSegmentResult {
+  filename: string;
+  index: number;
+  start: number;
+  end: number;
+}
+
 // Configurar rutas de ffmpeg si se definen en .env
 if (config.ffmpegPath !== 'ffmpeg') ffmpeg.setFfmpegPath(config.ffmpegPath);
 if (config.ffprobePath !== 'ffprobe') ffmpeg.setFfprobePath(config.ffprobePath);
@@ -110,8 +142,8 @@ export async function exportVideo(
 }
 
 /**
- * Extrae el audio de los segmentos conservados (o del video completo si no hay segmentación).
- * Salida en MP3.
+ * Extrae el audio de los segmentos conservados fusionados en un único MP3.
+ * Mantenida para compatibilidad; para exportación por segmento usar extractAudioSegments.
  */
 export async function extractAudio(
   uploadId: string,
@@ -173,6 +205,84 @@ export async function extractAudio(
 
     onProgress(100);
     return outputFilename;
+  } finally {
+    cleanupFiles(...tempPaths);
+  }
+}
+
+/**
+ * Extrae el audio de cada segmento 'keep' como un archivo MP3 independiente,
+ * en orden temporal. Cada archivo lleva un nombre descriptivo con el rango temporal.
+ *
+ * Ejemplo de salida:
+ *   audio_01_segundo_12_a_segundo_18.mp3
+ *   audio_02_segundo_25_a_segundo_40.mp3
+ *   audio_03_minuto_01_10_a_minuto_01_32.mp3
+ */
+export async function extractAudioSegments(
+  uploadId: string,
+  segments: TimelineSegment[],
+  onProgress: (p: number) => void,
+): Promise<AudioSegmentResult[]> {
+  const inputPath = getUploadPath(uploadId);
+
+  if (!fs.existsSync(inputPath)) {
+    throw new Error(`Archivo no encontrado para uploadId: ${uploadId}`);
+  }
+
+  // Ordenar segmentos por tiempo de inicio antes de procesar
+  const keepSegments = segments
+    .filter((s) => s.disposition === 'keep')
+    .sort((a, b) => a.start - b.start);
+
+  if (keepSegments.length === 0) {
+    throw new Error('No hay segmentos marcados para conservar');
+  }
+
+  const results: AudioSegmentResult[] = [];
+  const tempPaths: string[] = [];
+
+  try {
+    onProgress(5);
+
+    for (let i = 0; i < keepSegments.length; i++) {
+      const seg = keepSegments[i];
+      let filename = buildAudioSegmentFilename(i, seg.start, seg.end);
+      let outputPath = getResultPath(filename);
+
+      // Resolver colisión si ya existe un archivo con ese nombre
+      if (fs.existsSync(outputPath)) {
+        filename = buildAudioSegmentFilename(i, seg.start, seg.end).replace(
+          '.mp3',
+          `_${uuidv4().slice(0, 8)}.mp3`,
+        );
+        outputPath = getResultPath(filename);
+      }
+
+      // Cortar el segmento de video en un archivo temporal
+      const tempVideoPath = getTempPath(`seg_audio_${uuidv4()}.mp4`);
+      tempPaths.push(tempVideoPath);
+      await cutSegment(inputPath, seg.start, seg.end, tempVideoPath);
+
+      // Extraer audio del segmento cortado
+      await new Promise<void>((resolve, reject) => {
+        ffmpeg(tempVideoPath)
+          .noVideo()
+          .audioCodec('libmp3lame')
+          .audioQuality(2)
+          .output(outputPath)
+          .on('end', () => resolve())
+          .on('error', (err: Error) => reject(err))
+          .run();
+      });
+
+      results.push({ filename, index: i, start: seg.start, end: seg.end });
+
+      onProgress(5 + Math.round(((i + 1) / keepSegments.length) * 90));
+    }
+
+    onProgress(100);
+    return results;
   } finally {
     cleanupFiles(...tempPaths);
   }

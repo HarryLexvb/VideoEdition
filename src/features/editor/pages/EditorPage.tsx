@@ -503,17 +503,44 @@ export function EditorPage() {
           </div>
         ) : null}
 
-        {activeJobData?.status === 'completed' && activeJobData.resultUrl ? (
+        {activeJobData?.status === 'completed' && (activeJobData.resultUrls ?? (activeJobData.resultUrl ? [activeJobData.resultUrl] : [])).length > 0 ? (
           <div className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-950/40 dark:text-emerald-400">
-            <a
-              className="inline-flex items-center gap-2 font-semibold underline decoration-emerald-400 underline-offset-2 dark:decoration-emerald-600"
-              href={activeJobData.resultUrl}
-              target="_blank"
-              rel="noreferrer"
-            >
-              <Download className="h-4 w-4" aria-hidden="true" />
-              Abrir resultado procesado
-            </a>
+            {(activeJobData.resultUrls ?? [activeJobData.resultUrl!]).length === 1 ? (
+              <a
+                className="inline-flex items-center gap-2 font-semibold underline decoration-emerald-400 underline-offset-2 dark:decoration-emerald-600"
+                href={(activeJobData.resultUrls ?? [activeJobData.resultUrl!])[0]}
+                target="_blank"
+                rel="noreferrer"
+              >
+                <Download className="h-4 w-4" aria-hidden="true" />
+                Abrir resultado procesado
+              </a>
+            ) : (
+              <div className="space-y-2">
+                <p className="font-semibold">
+                  {(activeJobData.resultUrls ?? []).length} segmentos de audio listos para descargar:
+                </p>
+                <ul className="space-y-1">
+                  {(activeJobData.resultUrls ?? []).map((url, idx) => {
+                    const filename = url.split('/').pop() ?? `segmento_${idx + 1}`;
+                    return (
+                      <li key={url}>
+                        <a
+                          className="inline-flex items-center gap-2 underline decoration-emerald-400 underline-offset-2 dark:decoration-emerald-600"
+                          href={url}
+                          target="_blank"
+                          rel="noreferrer"
+                          download={filename}
+                        >
+                          <Download className="h-3.5 w-3.5" aria-hidden="true" />
+                          {filename}
+                        </a>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            )}
           </div>
         ) : null}
 
