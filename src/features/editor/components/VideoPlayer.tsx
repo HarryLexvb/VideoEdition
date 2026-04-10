@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 
-import { FileVideo, Play } from 'lucide-react';
+import { Camera, FileVideo, Play } from 'lucide-react';
 
 import { SYNC_THRESHOLD } from '../../../shared/lib/constants';
 import { formatTime } from '../../../shared/lib/formatTime';
@@ -236,6 +236,27 @@ export function VideoPlayer({
     };
   }, []);
 
+  function captureScreenshot(): void {
+    const mediaElement = videoRef.current;
+    if (!mediaElement || !video) return;
+
+    const canvas = document.createElement('canvas');
+    canvas.width = mediaElement.videoWidth;
+    canvas.height = mediaElement.videoHeight;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    ctx.drawImage(mediaElement, 0, 0, canvas.width, canvas.height);
+
+    const dataUrl = canvas.toDataURL('image/png');
+    const a = document.createElement('a');
+    const baseName = video.fileName.replace(/\.[^/.]+$/, '');
+    const timeStr = formatTime(mediaElement.currentTime).replace(/:/g, '-');
+    a.href = dataUrl;
+    a.download = `screenshot_${baseName}_${timeStr}.png`;
+    a.click();
+  }
+
   return (
     <section className="group rounded-3xl border border-white/40 bg-gradient-to-br from-slate-900 via-slate-950 to-slate-900 p-5 shadow-[0_24px_55px_-30px_rgba(2,6,23,0.9)] transition-all hover:shadow-[0_24px_65px_-25px_rgba(2,6,23,0.95)] dark:border-slate-800/60 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950">
       <div className="relative aspect-video overflow-hidden rounded-2xl bg-slate-950 ring-1 ring-white/5">
@@ -269,9 +290,23 @@ export function VideoPlayer({
             {video ? `Posicion: ${formatTime(requestedTime)}` : 'Esperando archivo'}
           </span>
         </div>
-        <span className="text-xs font-medium text-slate-500">
-          {video ? `Duracion: ${formatTime(video.duration)}` : 'Sin video cargado'}
-        </span>
+        <div className="flex items-center gap-3">
+          {video && (
+            <button
+              type="button"
+              onClick={captureScreenshot}
+              title="Capturar fotograma actual como PNG"
+              aria-label="Capturar fotograma"
+              className="flex items-center gap-1.5 rounded-lg bg-slate-700/60 px-2.5 py-1 text-xs font-medium text-slate-300 ring-1 ring-white/10 transition-colors hover:bg-slate-600/70 hover:text-white active:scale-95"
+            >
+              <Camera className="h-3.5 w-3.5" aria-hidden="true" />
+              Captura
+            </button>
+          )}
+          <span className="text-xs font-medium text-slate-500">
+            {video ? `Duracion: ${formatTime(video.duration)}` : 'Sin video cargado'}
+          </span>
+        </div>
       </div>
     </section>
   );
