@@ -67,3 +67,64 @@ export function getJobStatus(jobId: string): Promise<JobStatusResponse> {
     method: 'GET',
   });
 }
+
+export interface SegmentZipEntry {
+  /** Folder name inside the ZIP (e.g. "01 - Primer corte y capturas") */
+  folderName: string;
+  /** Audio filename already stored on the server (optional) */
+  audioFilename?: string;
+  /** PNG captures as data URLs to embed in the ZIP */
+  captures: Array<{ name: string; data: string }>;
+}
+
+/**
+ * Solicita al backend crear un ZIP organizado por segmentos/carpetas,
+ * incluyendo audios del servidor y capturas en base64.
+ */
+export async function downloadSegmentsZip(segments: SegmentZipEntry[]): Promise<Blob> {
+  const apiBaseUrl = getApiBaseUrl();
+  const response = await fetch(`${apiBaseUrl}/results/zip-segments`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ segments }),
+  });
+
+  if (!response.ok) {
+    let message = `Error al crear ZIP de segmentos (${response.status})`;
+    try {
+      const errorBody = (await response.json()) as { message?: string; error?: string };
+      message = errorBody.message ?? errorBody.error ?? message;
+    } catch {
+      // keep generic message
+    }
+    throw new ApiError(message, response.status);
+  }
+
+  return response.blob();
+}
+
+/**
+ * Solicita al backend empaquetar los filenames indicados en un ZIP y devuelve el Blob.
+ * Lanza ApiError si el servidor responde con error.
+ */
+export async function downloadZipFile(filenames: string[]): Promise<Blob> {
+  const apiBaseUrl = getApiBaseUrl();
+  const response = await fetch(`${apiBaseUrl}/results/zip`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ filenames }),
+  });
+
+  if (!response.ok) {
+    let message = `Error al crear ZIP (${response.status})`;
+    try {
+      const errorBody = (await response.json()) as { message?: string; error?: string };
+      message = errorBody.message ?? errorBody.error ?? message;
+    } catch {
+      // keep generic message
+    }
+    throw new ApiError(message, response.status);
+  }
+
+  return response.blob();
+}

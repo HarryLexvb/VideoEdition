@@ -49,6 +49,10 @@ interface EditorStore extends EditorSnapshot {
    * Returns true if extraction succeeded, false if conditions are not met.
    */
   extractAudioLocally: () => boolean;
+  /** Associate a PNG capture (dataUrl) with the given segment. */
+  addCaptureToSegment: (segmentId: string, dataUrl: string, videoTime: number) => void;
+  /** Remove a specific capture from a segment. */
+  removeCaptureFromSegment: (segmentId: string, captureId: string) => void;
   resetProject: () => void;
   undo: () => void;
   redo: () => void;
@@ -66,7 +70,10 @@ function snapshotFromState(state: EditorStore): EditorSnapshot {
   return {
     video: state.video ? { ...state.video } : null,
     tracks: state.tracks.map((t) => ({ ...t })),
-    segments: state.segments.map((segment) => ({ ...segment })),
+    segments: state.segments.map((segment) => ({
+      ...segment,
+      captures: segment.captures.map((c) => ({ ...c })),
+    })),
     selectedSegmentId: state.selectedSegmentId,
     selectedTrackIds: [...state.selectedTrackIds],
     playheadTime: state.playheadTime,
@@ -79,7 +86,10 @@ function cloneSnapshot(snapshot: EditorSnapshot): EditorSnapshot {
   return {
     video: snapshot.video ? { ...snapshot.video } : null,
     tracks: snapshot.tracks.map((t) => ({ ...t })),
-    segments: snapshot.segments.map((segment) => ({ ...segment })),
+    segments: snapshot.segments.map((segment) => ({
+      ...segment,
+      captures: segment.captures.map((c) => ({ ...c })),
+    })),
     selectedSegmentId: snapshot.selectedSegmentId,
     selectedTrackIds: [...snapshot.selectedTrackIds],
     playheadTime: snapshot.playheadTime,
@@ -490,6 +500,39 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
     });
 
     return true;
+  },
+
+  addCaptureToSegment: (segmentId, dataUrl, videoTime) => {
+    set((state) => ({
+      ...state,
+      segments: state.segments.map((seg) =>
+        seg.id === segmentId
+          ? {
+              ...seg,
+              captures: [
+                ...seg.captures,
+                {
+                  id: createId('capture'),
+                  dataUrl,
+                  videoTime,
+                  timestamp: new Date().toISOString(),
+                },
+              ],
+            }
+          : seg,
+      ),
+    }));
+  },
+
+  removeCaptureFromSegment: (segmentId, captureId) => {
+    set((state) => ({
+      ...state,
+      segments: state.segments.map((seg) =>
+        seg.id === segmentId
+          ? { ...seg, captures: seg.captures.filter((c) => c.id !== captureId) }
+          : seg,
+      ),
+    }));
   },
 
   resetProject: () => {

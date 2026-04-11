@@ -1,4 +1,4 @@
-import { AudioLines, Clapperboard, Download, Loader2, RotateCcw, Upload, Video } from 'lucide-react';
+import { Clapperboard, Download, Loader2, RotateCcw, Upload, Video } from 'lucide-react';
 
 import { Button } from '../../../shared/components/Button';
 import { StatusBadge } from '../../../shared/components/StatusBadge';
@@ -17,11 +17,8 @@ interface HeaderBarProps {
   isTusEnabled: boolean;
   activeJob: JobStatusResponse | null;
   exporting: boolean;
-  extractingAudio: boolean;
-  audioExtracted: boolean;
   onOpenUploader: () => void;
   onExport: () => void;
-  onExtractAudio: () => void;
   onResetProject: () => void;
 }
 
@@ -67,11 +64,8 @@ export function HeaderBar({
   isTusEnabled,
   activeJob,
   exporting,
-  extractingAudio,
-  audioExtracted,
   onOpenUploader,
   onExport,
-  onExtractAudio,
   onResetProject,
 }: HeaderBarProps) {
   return (
@@ -110,19 +104,9 @@ export function HeaderBar({
             <div className="absolute inset-0 rounded-xl bg-gradient-to-r from-brand-400 via-cyan-400 to-brand-400 opacity-0 blur-lg transition-opacity duration-300 group-hover:opacity-50" />
           </button>
 
-          <Button onClick={onExport} loading={exporting} disabled={!video || extractingAudio}>
+          <Button onClick={onExport} loading={exporting} disabled={!video}>
             <Download className="h-4 w-4" aria-hidden="true" />
             Exportar
-          </Button>
-          <Button
-            variant="secondary"
-            onClick={onExtractAudio}
-            loading={extractingAudio}
-            disabled={!video || exporting || audioExtracted}
-            title={audioExtracted ? 'Audio ya extraido - resetea el proyecto para volver al estado original' : 'Extraer audio del video'}
-          >
-            <AudioLines className="h-4 w-4" aria-hidden="true" />
-            {audioExtracted ? 'Audio extraido' : 'Extraer audio'}
           </Button>
           <Button variant="ghost" onClick={onResetProject} disabled={!video}>
             <RotateCcw className="h-4 w-4" aria-hidden="true" />

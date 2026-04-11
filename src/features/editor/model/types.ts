@@ -28,11 +28,23 @@ export interface MediaTrack {
   muted: boolean;
 }
 
+export interface SegmentCapture {
+  id: string;
+  /** PNG data URL (data:image/png;base64,...) */
+  dataUrl: string;
+  /** Video playhead time when the capture was taken */
+  videoTime: number;
+  /** ISO timestamp of when the capture was taken */
+  timestamp: string;
+}
+
 export interface TimelineSegment {
   id: string;
   start: number;
   end: number;
   disposition: SegmentDisposition;
+  /** Captures (screenshots) associated with this segment */
+  captures: SegmentCapture[];
 }
 
 export interface EditorSnapshot {

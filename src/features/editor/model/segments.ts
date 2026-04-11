@@ -14,6 +14,7 @@ export function createInitialSegment(duration: number): TimelineSegment {
     start: 0,
     end: Math.max(duration, 0),
     disposition: 'keep',
+    captures: [],
   };
 }
 
@@ -45,11 +46,16 @@ export function splitSegmentAtTime(
 
   const target = segments[targetIndex];
 
+  // Redistribute captures: captures before cut time go to left segment, the rest to right
+  const leftCaptures = target.captures.filter((c) => c.videoTime < time);
+  const rightCaptures = target.captures.filter((c) => c.videoTime >= time);
+
   const leftSegment: TimelineSegment = {
     id: createId('segment'),
     start: target.start,
     end: time,
     disposition: target.disposition,
+    captures: leftCaptures,
   };
 
   const rightSegment: TimelineSegment = {
@@ -57,6 +63,7 @@ export function splitSegmentAtTime(
     start: time,
     end: target.end,
     disposition: target.disposition,
+    captures: rightCaptures,
   };
 
   return {

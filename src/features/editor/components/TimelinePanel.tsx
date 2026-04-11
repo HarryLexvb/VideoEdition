@@ -1,12 +1,16 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
-import { Activity, Film, Layers, Music2, Scissors, Volume2, VolumeX } from 'lucide-react';
+import { Activity, AudioLines, Camera, Film, Layers, Music2, Scissors, Volume2, VolumeX } from 'lucide-react';
 
 import { Button } from '../../../shared/components/Button';
 import { formatTime } from '../../../shared/lib/formatTime';
 import type { MediaTrack, TimelineSegment } from '../model/types';
 import { AudioWaveformTrack } from './AudioWaveformTrack';
 import { VideoThumbnailStrip } from './VideoThumbnailStrip';
+
+// ────────────────────────────────────────────────────────────────────
+// Types
+// ────────────────────────────────────────────────────────────────────
 
 interface TimelinePanelProps {
   mediaElement: HTMLVideoElement | null;
@@ -25,25 +29,43 @@ interface TimelinePanelProps {
   onSetTrimEnd: (time: number) => void;
   onToggleTrackMute: (trackId: string) => void;
   onSelectTrack: (trackId: string, multi: boolean) => void;
+  // Custom extraction props
+  customExtractionActive?: boolean;
+  validCustomRanges?: Array<{ id: string; start: number; end: number }>;
+  onCustomRangeCreate?: (range: { start: number; end: number }) => void;
+  // Audio editing toolbar props
+  extractingAudio?: boolean;
+  audioExtracted?: boolean;
+  onExtractAudio?: () => void;
+  onCustomExtraction?: () => void;
+  onCapture?: () => void;
 }
 
-/**
- * Converts a segment disposition + selected state to a color for the region overlay.
- */
+/** Validated numeric range (for overlay rendering) */
+interface NumericRange {
+  id: string;
+  start: number;
+  end: number;
+}
+
+/** Draft range during mouse drag */
+interface DraftRange {
+  start: number;
+  end: number;
+}
+
+// ────────────────────────────────────────────────────────────────────
+// Segment disposition overlay
+// ────────────────────────────────────────────────────────────────────
+
 function getSegmentColor(segment: TimelineSegment, selectedSegmentId: string | null): string {
   const isSelected = segment.id === selectedSegmentId;
-
   if (segment.disposition === 'remove') {
     return isSelected ? 'rgba(251, 113, 133, 0.55)' : 'rgba(251, 113, 133, 0.28)';
   }
-
   return isSelected ? 'rgba(16, 185, 129, 0.55)' : 'rgba(16, 185, 129, 0.22)';
 }
 
-/**
- * Renders segment markers over a track row.
- * Uses absolute positioning relative to the container width.
- */
 function SegmentOverlay({
   segments,
   selectedSegmentId,
@@ -58,13 +80,11 @@ function SegmentOverlay({
   onSeek: (time: number) => void;
 }) {
   if (duration <= 0) return null;
-
   return (
     <div className="absolute inset-0 pointer-events-none">
       {segments.map((segment) => {
         const left = (segment.start / duration) * 100;
         const width = ((segment.end - segment.start) / duration) * 100;
-
         return (
           <div
             key={segment.id}
@@ -73,9 +93,12 @@ function SegmentOverlay({
               left: `${left}%`,
               width: `${width}%`,
               backgroundColor: getSegmentColor(segment, selectedSegmentId),
-              borderColor: segment.id === selectedSegmentId
-                ? (segment.disposition === 'remove' ? 'rgba(251,113,133,0.9)' : 'rgba(16,185,129,0.9)')
-                : 'transparent',
+              borderColor:
+                segment.id === selectedSegmentId
+                  ? segment.disposition === 'remove'
+                    ? 'rgba(251,113,133,0.9)'
+                    : 'rgba(16,185,129,0.9)'
+                  : 'transparent',
             }}
             onClick={(e) => {
               e.stopPropagation();
@@ -99,35 +122,27 @@ function SegmentOverlay({
   );
 }
 
-/**
- * Renders a playhead cursor over a track row.
- */
-function PlayheadCursor({
-  playheadTime,
-  duration,
-}: {
-  playheadTime: number;
-  duration: number;
-}) {
+// ────────────────────────────────────────────────────────────────────
+// Playhead cursor
+// ────────────────────────────────────────────────────────────────────
+
+function PlayheadCursor({ playheadTime, duration }: { playheadTime: number; duration: number }) {
   if (duration <= 0) return null;
-
-  const left = (playheadTime / duration) * 100;
-
   return (
     <div
       className="absolute top-0 bottom-0 w-0.5 bg-red-500 z-10 pointer-events-none"
-      style={{ left: `${left}%` }}
+      style={{ left: `${(playheadTime / duration) * 100}%` }}
       aria-hidden="true"
     >
-      {/* Top triangle handle */}
       <div className="absolute -top-1 left-1/2 -translate-x-1/2 h-2 w-2 rotate-45 bg-red-500" />
     </div>
   );
 }
 
-/**
- * Trim range overlay.
- */
+// ────────────────────────────────────────────────────────────────────
+// Trim range overlay
+// ────────────────────────────────────────────────────────────────────
+
 function TrimOverlay({
   trimStart,
   trimEnd,
@@ -138,16 +153,12 @@ function TrimOverlay({
   duration: number;
 }) {
   if (trimStart === null || trimEnd === null || duration <= 0) return null;
-
-  const left = (trimStart / duration) * 100;
-  const width = ((trimEnd - trimStart) / duration) * 100;
-
   return (
     <div
       className="absolute top-0 bottom-0 pointer-events-none z-5"
       style={{
-        left: `${left}%`,
-        width: `${width}%`,
+        left: `${(trimStart / duration) * 100}%`,
+        width: `${((trimEnd - trimStart) / duration) * 100}%`,
         backgroundColor: 'rgba(59, 130, 246, 0.22)',
         borderLeft: '2px solid rgba(59,130,246,0.8)',
         borderRight: '2px solid rgba(59,130,246,0.8)',
@@ -161,9 +172,59 @@ function TrimOverlay({
   );
 }
 
-/**
- * A single track row in the timeline.
- */
+// ────────────────────────────────────────────────────────────────────
+// Custom extraction range overlay (amber / orange)
+// ────────────────────────────────────────────────────────────────────
+
+function CustomRangeOverlay({
+  ranges,
+  draftRange,
+  duration,
+}: {
+  ranges: NumericRange[];
+  draftRange: DraftRange | null;
+  duration: number;
+}) {
+  if (duration <= 0) return null;
+  return (
+    <div className="absolute inset-0 pointer-events-none" style={{ zIndex: 8 }}>
+      {ranges.map((r) => (
+        <div
+          key={r.id}
+          className="absolute top-0 bottom-0"
+          style={{
+            left: `${(r.start / duration) * 100}%`,
+            width: `${((r.end - r.start) / duration) * 100}%`,
+            backgroundColor: 'rgba(245, 158, 11, 0.32)',
+            borderLeft: '2px solid rgba(245, 158, 11, 0.85)',
+            borderRight: '2px solid rgba(245, 158, 11, 0.85)',
+          }}
+        >
+          <div className="absolute top-1 left-1 text-[8px] font-bold text-amber-600 dark:text-amber-400 select-none">
+            ▶
+          </div>
+        </div>
+      ))}
+      {draftRange && draftRange.end > draftRange.start && (
+        <div
+          className="absolute top-0 bottom-0"
+          style={{
+            left: `${(draftRange.start / duration) * 100}%`,
+            width: `${((draftRange.end - draftRange.start) / duration) * 100}%`,
+            backgroundColor: 'rgba(245, 158, 11, 0.18)',
+            borderLeft: '2px dashed rgba(245, 158, 11, 0.7)',
+            borderRight: '2px dashed rgba(245, 158, 11, 0.7)',
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+// ────────────────────────────────────────────────────────────────────
+// Track row
+// ────────────────────────────────────────────────────────────────────
+
 function TrackRow({
   track,
   isSelected,
@@ -173,6 +234,8 @@ function TrackRow({
   playheadTime,
   trimStart,
   trimEnd,
+  customRanges,
+  draftRange,
   onSeek,
   onSelectSegment,
   onToggleMute,
@@ -186,16 +249,14 @@ function TrackRow({
   playheadTime: number;
   trimStart: number | null;
   trimEnd: number | null;
+  customRanges: NumericRange[];
+  draftRange: DraftRange | null;
   onSeek: (time: number) => void;
   onSelectSegment: (id: string) => void;
   onToggleMute: (trackId: string) => void;
   onSelectTrack: (trackId: string, multi: boolean) => void;
 }) {
   const isVideo = track.kind === 'video';
-
-  function handleContentClick(e: React.MouseEvent<HTMLDivElement>) {
-    onSelectTrack(track.id, e.ctrlKey || e.metaKey);
-  }
 
   return (
     <div className="flex items-stretch gap-3">
@@ -229,7 +290,6 @@ function TrackRow({
               {isVideo ? 'Video' : 'Audio'}
             </span>
           </div>
-          {/* Mute toggle button */}
           <button
             type="button"
             className={`flex-shrink-0 rounded p-0.5 transition-colors focus:outline-none focus:ring-1 focus:ring-brand-400
@@ -237,11 +297,8 @@ function TrackRow({
                 ? 'text-rose-400 hover:text-rose-300 bg-rose-950/40 hover:bg-rose-900/40'
                 : 'text-slate-400 hover:text-slate-200 bg-slate-700/40 hover:bg-slate-600/40'
               }`}
-            onClick={(e) => {
-              e.stopPropagation();
-              onToggleMute(track.id);
-            }}
-            aria-label={track.muted ? `Activar audio de pista ${isVideo ? 'video' : 'audio'}` : `Silenciar pista ${isVideo ? 'video' : 'audio'}`}
+            onClick={(e) => { e.stopPropagation(); onToggleMute(track.id); }}
+            aria-label={track.muted ? 'Activar audio' : 'Silenciar'}
             title={track.muted ? 'Activar audio' : 'Silenciar'}
           >
             {track.muted ? (
@@ -265,15 +322,11 @@ function TrackRow({
       {/* Track content area */}
       <div
         className="relative flex-1 min-w-0 cursor-pointer"
-        onClick={handleContentClick}
+        onClick={(e) => onSelectTrack(track.id, e.ctrlKey || e.metaKey)}
         role="presentation"
       >
         {isVideo ? (
-          <VideoThumbnailStrip
-            sourceUrl={track.sourceUrl}
-            duration={track.duration}
-            height={72}
-          />
+          <VideoThumbnailStrip sourceUrl={track.sourceUrl} duration={track.duration} height={72} />
         ) : (
           <AudioWaveformTrack
             sourceUrl={track.sourceUrl}
@@ -285,12 +338,11 @@ function TrackRow({
           />
         )}
 
-        {/* Selection ring on content */}
         {isSelected && (
           <div className="absolute inset-0 rounded-lg ring-2 ring-brand-500/60 pointer-events-none" aria-hidden="true" />
         )}
 
-        {/* Segment overlay on top of the visual */}
+        {/* Overlays stacked in order: segments → trim → custom ranges → playhead */}
         <div className="absolute inset-0">
           <SegmentOverlay
             segments={segments}
@@ -299,20 +351,27 @@ function TrackRow({
             onSelectSegment={onSelectSegment}
             onSeek={onSeek}
           />
-          <TrimOverlay
-            trimStart={trimStart}
-            trimEnd={trimEnd}
-            duration={duration}
-          />
-          <PlayheadCursor
-            playheadTime={playheadTime}
-            duration={duration}
-          />
+          <TrimOverlay trimStart={trimStart} trimEnd={trimEnd} duration={duration} />
+          <CustomRangeOverlay ranges={customRanges} draftRange={draftRange} duration={duration} />
+          <PlayheadCursor playheadTime={playheadTime} duration={duration} />
         </div>
       </div>
     </div>
   );
 }
+
+// ────────────────────────────────────────────────────────────────────
+// Main TimelinePanel
+// ────────────────────────────────────────────────────────────────────
+
+/**
+ * Width (px) of the track label column.
+ * Must match `w-36` (9rem = 144px) + `gap-3` (0.75rem = 12px) = 156px.
+ */
+const LABEL_OFFSET_PX = 156;
+
+/** Minimum drag distance (seconds) required to register a range */
+const MIN_RANGE_DURATION_S = 0.4;
 
 export function TimelinePanel({
   mediaElement,
@@ -331,44 +390,115 @@ export function TimelinePanel({
   onSetTrimEnd: _onSetTrimEnd,
   onToggleTrackMute,
   onSelectTrack,
+  customExtractionActive = false,
+  validCustomRanges = [],
+  onCustomRangeCreate,
+  extractingAudio = false,
+  audioExtracted = false,
+  onExtractAudio,
+  onCustomExtraction,
+  onCapture,
 }: TimelinePanelProps) {
   const scrubberRef = useRef<HTMLDivElement | null>(null);
+  const tracksContainerRef = useRef<HTMLDivElement | null>(null);
+
+  // Local drag state (ref avoids re-renders during drag)
+  const dragRef = useRef<{ startTime: number } | null>(null);
+  // Draft range for live visual feedback during drag
+  const [draftRange, setDraftRange] = useState<DraftRange | null>(null);
 
   const keepCount = useMemo(() => segments.filter((s) => s.disposition === 'keep').length, [segments]);
   const removeCount = useMemo(() => segments.filter((s) => s.disposition === 'remove').length, [segments]);
   const hasTracks = tracks.length > 0;
 
-  // Timecode ruler click -> seek
-  function handleRulerClick(event: React.MouseEvent<HTMLDivElement>) {
-    if (duration <= 0) return;
-    const rect = event.currentTarget.getBoundingClientRect();
-    const x = event.clientX - rect.left;
-    const ratio = x / rect.width;
-    onSeek(ratio * duration);
-  }
-
-  // Sync mediaElement muted state based on track model
+  // ── Sync media element muted state ──────────────────────────────
   useEffect(() => {
     if (!mediaElement) return;
     const videoTrack = tracks.find((t) => t.kind === 'video');
-    if (videoTrack) {
-      mediaElement.muted = videoTrack.muted;
-    }
+    if (videoTrack) mediaElement.muted = videoTrack.muted;
   }, [mediaElement, tracks]);
 
-  // Generate timecode ruler marks
+  // ── Cancel drag on global mouseup (e.g. mouse released outside) ─
+  useEffect(() => {
+    if (!customExtractionActive) return;
+
+    function onWindowMouseUp(e: MouseEvent) {
+      if (e.button !== 2 || !dragRef.current) return;
+      dragRef.current = null;
+      setDraftRange(null);
+    }
+
+    window.addEventListener('mouseup', onWindowMouseUp);
+    return () => window.removeEventListener('mouseup', onWindowMouseUp);
+  }, [customExtractionActive]);
+
+  // ── Ruler click → seek ──────────────────────────────────────────
+  function handleRulerClick(event: React.MouseEvent<HTMLDivElement>) {
+    if (duration <= 0 || event.button !== 0) return;
+    const rect = event.currentTarget.getBoundingClientRect();
+    const ratio = (event.clientX - rect.left) / rect.width;
+    onSeek(Math.max(0, Math.min(ratio * duration, duration)));
+  }
+
+  // ── Compute time from a mouse event on the tracks container ─────
+  function getTimeFromTracksEvent(e: React.MouseEvent<HTMLDivElement>): number | null {
+    const container = tracksContainerRef.current;
+    if (!container || duration <= 0) return null;
+    const rect = container.getBoundingClientRect();
+    const x = e.clientX - rect.left - LABEL_OFFSET_PX;
+    const contentWidth = rect.width - LABEL_OFFSET_PX;
+    if (contentWidth <= 0) return null;
+    return Math.max(0, Math.min((x / contentWidth) * duration, duration));
+  }
+
+  // ── Drag handlers (right-click = button 2) ──────────────────────
+  function handleTracksMouseDown(e: React.MouseEvent<HTMLDivElement>) {
+    if (!customExtractionActive || e.button !== 2 || duration <= 0) return;
+    e.preventDefault(); // suppress context menu
+    const time = getTimeFromTracksEvent(e);
+    if (time === null) return;
+    dragRef.current = { startTime: time };
+    setDraftRange({ start: time, end: time });
+  }
+
+  function handleTracksMouseMove(e: React.MouseEvent<HTMLDivElement>) {
+    if (!customExtractionActive || !dragRef.current) return;
+    const time = getTimeFromTracksEvent(e);
+    if (time === null) return;
+    const s = Math.min(dragRef.current.startTime, time);
+    const en = Math.max(dragRef.current.startTime, time);
+    setDraftRange({ start: s, end: en });
+  }
+
+  function handleTracksMouseUp(e: React.MouseEvent<HTMLDivElement>) {
+    if (!customExtractionActive || e.button !== 2 || !dragRef.current) return;
+    e.preventDefault();
+    const time = getTimeFromTracksEvent(e) ?? dragRef.current.startTime;
+    const start = Math.min(dragRef.current.startTime, time);
+    const end = Math.max(dragRef.current.startTime, time);
+    dragRef.current = null;
+    setDraftRange(null);
+
+    if (end - start >= MIN_RANGE_DURATION_S) {
+      onCustomRangeCreate?.({
+        start: Number(start.toFixed(2)),
+        end: Number(end.toFixed(2)),
+      });
+    }
+  }
+
+  function handleTracksContextMenu(e: React.MouseEvent<HTMLDivElement>) {
+    if (customExtractionActive) e.preventDefault();
+  }
+
+  // ── Ruler marks ─────────────────────────────────────────────────
   const rulerMarks = useMemo(() => {
     if (duration <= 0) return [];
     const step = duration <= 30 ? 5 : duration <= 120 ? 10 : duration <= 600 ? 30 : 60;
     const marks: number[] = [];
-    for (let t = 0; t <= duration; t += step) {
-      marks.push(t);
-    }
+    for (let t = 0; t <= duration; t += step) marks.push(t);
     return marks;
   }, [duration]);
-
-  // Sync WaveSurfer was here before - now removed. The VideoPlayer controls playback
-  // and AudioWaveformTrack only visualizes. We keep the seek sync via onSeek prop.
 
   return (
     <section className="rounded-3xl border border-white/50 bg-gradient-to-br from-white/90 via-white/75 to-white/85 p-5 shadow-[0_25px_60px_-40px_rgba(15,23,42,0.75)] backdrop-blur-xl dark:border-slate-700/50 dark:from-slate-800/95 dark:via-slate-800/80 dark:to-slate-800/90">
@@ -378,24 +508,80 @@ export function TimelinePanel({
           <h2 className="flex items-center gap-2 font-display text-lg font-semibold text-slate-900 dark:text-slate-100">
             <Layers className="h-5 w-5 text-brand-600 dark:text-brand-500" aria-hidden="true" />
             Linea de tiempo
+            {customExtractionActive && (
+              <span className="ml-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-700 dark:bg-amber-900/40 dark:text-amber-400">
+                Extraccion activa
+              </span>
+            )}
           </h2>
           <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
             {hasTracks ? (
               <>
-                Cabezal: <span className="font-semibold text-slate-900 dark:text-slate-100">{formatTime(playheadTime)}</span> /{' '}
-                {formatTime(duration)}
+                Cabezal:{' '}
+                <span className="font-semibold text-slate-900 dark:text-slate-100">{formatTime(playheadTime)}</span>{' '}
+                / {formatTime(duration)}
                 {' · '}
-                <span className="text-slate-500 dark:text-slate-500">{tracks.length} {tracks.length === 1 ? 'pista' : 'pistas'}</span>
+                <span className="text-slate-500 dark:text-slate-500">
+                  {tracks.length} {tracks.length === 1 ? 'pista' : 'pistas'}
+                </span>
+                {customExtractionActive && validCustomRanges.length > 0 && (
+                  <>
+                    {' · '}
+                    <span className="font-medium text-amber-600 dark:text-amber-400">
+                      {validCustomRanges.length} rango{validCustomRanges.length !== 1 ? 's' : ''} seleccionado{validCustomRanges.length !== 1 ? 's' : ''}
+                    </span>
+                  </>
+                )}
               </>
             ) : (
               'Esperando video para generar timeline'
             )}
           </p>
         </div>
-        <Button onClick={onCutAtPlayhead} disabled={duration <= 0} size="sm">
-          <Scissors className="h-3.5 w-3.5" aria-hidden="true" />
-          Cortar en cabezal
-        </Button>
+
+        <div className="flex flex-wrap items-center gap-2">
+          {customExtractionActive && (
+            <span className="hidden text-xs text-amber-600 dark:text-amber-400 sm:block">
+              Clic derecho + arrastrar para marcar rangos
+            </span>
+          )}
+          <div className="inline-flex items-center gap-1 rounded-xl bg-slate-100/80 p-1 shadow-inner ring-1 ring-slate-200/70 dark:bg-slate-800/60 dark:ring-slate-700/50">
+            <Button size="sm" onClick={onCutAtPlayhead} disabled={duration <= 0}>
+              <Scissors className="h-3.5 w-3.5" aria-hidden="true" />
+              Cortar en cabezal
+            </Button>
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={onCapture}
+              disabled={duration <= 0 || !selectedSegmentId}
+              title={!selectedSegmentId ? 'Selecciona un segmento para asociar la captura' : 'Capturar fotograma actual'}
+            >
+              <Camera className="h-3.5 w-3.5" aria-hidden="true" />
+              Captura
+            </Button>
+            <div className="mx-0.5 h-5 w-px bg-slate-300/70 dark:bg-slate-600/70" aria-hidden="true" />
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={onExtractAudio}
+              loading={extractingAudio}
+              disabled={duration <= 0 || extractingAudio || audioExtracted}
+            >
+              <AudioLines className="h-3.5 w-3.5" aria-hidden="true" />
+              {audioExtracted ? 'Audio extraido' : 'Extraer audio'}
+            </Button>
+            <Button
+              size="sm"
+              variant={customExtractionActive ? 'amber' : 'secondary'}
+              onClick={onCustomExtraction}
+              disabled={duration <= 0 || extractingAudio}
+            >
+              <Scissors className="h-3.5 w-3.5" aria-hidden="true" />
+              Extraccion personalizada
+            </Button>
+          </div>
+        </div>
       </div>
 
       {hasTracks ? (
@@ -406,7 +592,7 @@ export function TimelinePanel({
             className="ml-[140px] cursor-pointer relative h-5 select-none"
             onClick={handleRulerClick}
             role="slider"
-            aria-label="Timecode ruler - click to seek"
+            aria-label="Timecode ruler - click para buscar"
             aria-valuenow={playheadTime}
             aria-valuemin={0}
             aria-valuemax={duration}
@@ -424,10 +610,11 @@ export function TimelinePanel({
                 style={{ left: `${(t / duration) * 100}%` }}
               >
                 <div className="h-2.5 w-px bg-slate-400 dark:bg-slate-600" />
-                <span className="text-[9px] text-slate-500 dark:text-slate-500 -translate-x-1/2 mt-px">{formatTime(t)}</span>
+                <span className="text-[9px] text-slate-500 dark:text-slate-500 -translate-x-1/2 mt-px">
+                  {formatTime(t)}
+                </span>
               </div>
             ))}
-            {/* Playhead indicator on ruler */}
             {duration > 0 && (
               <div
                 className="absolute top-0 bottom-0 w-0.5 bg-red-500 z-10 pointer-events-none"
@@ -436,8 +623,15 @@ export function TimelinePanel({
             )}
           </div>
 
-          {/* Track rows */}
-          <div className="space-y-2">
+          {/* Track rows — right-click drag handled here */}
+          <div
+            ref={tracksContainerRef}
+            className="relative space-y-2"
+            onMouseDown={handleTracksMouseDown}
+            onMouseMove={handleTracksMouseMove}
+            onMouseUp={handleTracksMouseUp}
+            onContextMenu={handleTracksContextMenu}
+          >
             {tracks.map((track) => (
               <TrackRow
                 key={track.id}
@@ -449,13 +643,30 @@ export function TimelinePanel({
                 playheadTime={playheadTime}
                 trimStart={trimStart}
                 trimEnd={trimEnd}
+                customRanges={validCustomRanges}
+                draftRange={draftRange}
                 onSeek={onSeek}
                 onSelectSegment={onSelectSegment}
                 onToggleMute={onToggleTrackMute}
                 onSelectTrack={onSelectTrack}
               />
             ))}
+
+            {/* Custom extraction drag hint overlay (visual only, non-blocking) */}
+            {customExtractionActive && hasTracks && (
+              <div
+                className="pointer-events-none absolute inset-y-0 rounded-r-lg"
+                style={{
+                  left: LABEL_OFFSET_PX,
+                  right: 0,
+                  border: '1.5px dashed rgba(245,158,11,0.35)',
+                  borderLeft: 'none',
+                }}
+                aria-hidden="true"
+              />
+            )}
           </div>
+
           {tracks.length > 1 && (
             <p className="ml-[152px] mt-1 text-[9px] text-slate-500 dark:text-slate-600 select-none">
               Ctrl+clic para seleccionar multiples pistas

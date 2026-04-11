@@ -1,18 +1,23 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import Dashboard from '@uppy/react/dashboard';
-import { AlertCircle, Download, FileVideo, MousePointerClick, Sparkles, Upload as UploadIcon } from 'lucide-react';
+import { AlertCircle, Archive, Download, FileVideo, MousePointerClick, Sparkles, Upload as UploadIcon } from 'lucide-react';
 
 import { StatusBadge } from '../../../shared/components/StatusBadge';
+import { Button } from '../../../shared/components/Button';
 import { createId } from '../../../shared/lib/id';
 import { useProcessingJob, useStartExportJob, useStartExtractAudioJob } from '../api/hooks';
+import { downloadSegmentsZip, downloadZipFile } from '../api/client';
+import type { SegmentZipEntry } from '../api/client';
 import { HeaderBar } from '../components/HeaderBar';
+import { CustomExtractionPanel, type CustomRange } from '../components/CustomExtractionPanel';
 import { SidebarPanel } from '../components/SidebarPanel';
 import { TimelinePanel } from '../components/TimelinePanel';
 import { TrimControls } from '../components/TrimControls';
 import { VideoPlayer } from '../components/VideoPlayer';
 import { useVideoUpload } from '../hooks/useVideoUpload';
 import { buildEditorJobPayload } from '../model/projectPayload';
+import type { EditorJobPayload } from '../model/projectPayload';
 import { useEditorStore } from '../store/useEditorStore';
 
 interface ActiveJobContext {
@@ -25,6 +30,12 @@ export function EditorPage() {
   const [activeJobContext, setActiveJobContext] = useState<ActiveJobContext | null>(null);
   const [uiMessage, setUiMessage] = useState<string | null>(null);
   const [uiError, setUiError] = useState<string | null>(null);
+  // Custom extraction — state lifted here so timeline can show overlays
+  const [customExtractionMode, setCustomExtractionMode] = useState(false);
+  const [customRanges, setCustomRanges] = useState<CustomRange[]>([
+    { id: createId('range'), start: '', end: '' },
+  ]);
+  const [isDownloadingZip, setIsDownloadingZip] = useState(false);
 
   const previousObjectUrlRef = useRef<string | null>(null);
   const lastHandledJobStatusRef = useRef<string | null>(null);
@@ -64,6 +75,8 @@ export function EditorPage() {
   const extractAudioLocally = useEditorStore((state) => state.extractAudioLocally);
   const toggleTrackMute = useEditorStore((state) => state.toggleTrackMute);
   const selectTrack = useEditorStore((state) => state.selectTrack);
+  const addCaptureToSegment = useEditorStore((state) => state.addCaptureToSegment);
+  const removeCaptureFromSegment = useEditorStore((state) => state.removeCaptureFromSegment);
 
   const historyPast = useMemo(() => past.map((record) => record.history), [past]);
   const historyFuture = useMemo(() => future.map((record) => record.history), [future]);
@@ -297,6 +310,65 @@ export function EditorPage() {
 
   const activeJobData = useMemo(() => jobStatusQuery.data ?? null, [jobStatusQuery.data]);
 
+  // ── Custom ranges CRUD ────────────────────────────────────────────
+
+  /** Parsed ranges usable by the timeline overlay (only valid ones). */
+  const validCustomRanges = useMemo(() => {
+    if (!customExtractionMode) return [];
+    return customRanges
+      .map((r) => ({ id: r.id, start: parseFloat(r.start), end: parseFloat(r.end) }))
+      .filter((r) => !isNaN(r.start) && !isNaN(r.end) && r.end > r.start && r.start >= 0);
+  }, [customExtractionMode, customRanges]);
+
+  const handleAddCustomRange = useCallback(() => {
+    setCustomRanges((prev) => [...prev, { id: createId('range'), start: '', end: '' }]);
+  }, []);
+
+  const handleUpdateCustomRange = useCallback(
+    (id: string, field: 'start' | 'end', value: string) => {
+      setCustomRanges((prev) =>
+        prev.map((r) => (r.id === id ? { ...r, [field]: value } : r)),
+      );
+    },
+    [],
+  );
+
+  const handleRemoveCustomRange = useCallback((id: string) => {
+    setCustomRanges((prev) => {
+      if (prev.length === 1) return prev;
+      return prev.filter((r) => r.id !== id);
+    });
+  }, []);
+
+  /** Called by TimelinePanel when the user finishes a right-click drag. */
+  const handleCustomRangeCreate = useCallback(
+    (range: { start: number; end: number }) => {
+      setCustomRanges((prev) => [
+        ...prev.filter((r) => r.start.trim() !== '' || r.end.trim() !== ''), // remove empty placeholders
+        {
+          id: createId('range'),
+          start: String(range.start),
+          end: String(range.end),
+        },
+      ]);
+    },
+    [],
+  );
+
+  function handleCapture(): void {
+    if (!mediaElement || !selectedSegmentId) return;
+
+    const canvas = document.createElement('canvas');
+    canvas.width = mediaElement.videoWidth || 640;
+    canvas.height = mediaElement.videoHeight || 360;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    ctx.drawImage(mediaElement, 0, 0, canvas.width, canvas.height);
+    const dataUrl = canvas.toDataURL('image/png');
+    addCaptureToSegment(selectedSegmentId, dataUrl, playheadTime);
+  }
+
   function buildPayloadOrFail() {
     if (!video) {
       setUiError('Carga un video para lanzar operaciones de backend.');
@@ -402,6 +474,152 @@ export function EditorPage() {
     }
   }
 
+  /**
+   * Recibe rangos ya validados desde el inline panel y los envía al backend.
+   * El panel valida antes de llamar aquí, así que los rangos son siempre correctos.
+   */
+  function runCustomExtractionJob(ranges: Array<{ start: number; end: number }>): void {
+
+    if (!video) {
+      setUiError('Carga un video primero.');
+      return;
+    }
+
+    if (video.duration <= 0) {
+      setUiError('Esperando metadata del video. Intenta nuevamente en unos segundos.');
+      return;
+    }
+
+    if (!import.meta.env.VITE_API_BASE_URL) {
+      setUiError('La extraccion personalizada requiere que VITE_API_BASE_URL este configurado en el entorno.');
+      return;
+    }
+
+    if (!video.uploadId) {
+      setUiError('La extraccion personalizada requiere que el video este subido al servidor (Tus). Configura VITE_TUS_ENDPOINT y vuelve a cargar el video.');
+      return;
+    }
+
+    const customTimeline = ranges.map((range, i) => ({
+      id: `custom-${i}`,
+      start: Number(range.start.toFixed(3)),
+      end: Number(range.end.toFixed(3)),
+      disposition: 'keep' as const,
+    }));
+
+    const payload: EditorJobPayload = {
+      source: {
+        fileName: video.fileName,
+        mimeType: video.mimeType,
+        size: video.size,
+        uploadId: video.uploadId,
+      },
+      timeline: customTimeline,
+      trimRange: { start: null, end: null },
+      meta: {
+        duration: Number(video.duration.toFixed(3)),
+        keepSegmentCount: customTimeline.length,
+        removeSegmentCount: 0,
+        hasTrimRange: false,
+        trimDuration: null,
+      },
+    };
+
+    setUiError(null);
+    setUiMessage(`Enviando extraccion personalizada: ${ranges.length} rango(s) al backend...`);
+
+    extractAudioMutation.mutate(payload, {
+      onSuccess: (response) => {
+        setActiveJobContext({ action: 'extract-audio', jobId: response.jobId });
+        setUiMessage(
+          `Extraccion personalizada enviada (${ranges.length} segmento(s)). Seguimiento activo por polling.`
+        );
+      },
+      onError: (error) => {
+        setUiError(error.message);
+      },
+    });
+  }
+
+  /**
+   * Descarga todos los archivos del job actual empaquetados en un ZIP.
+   * Organiza por carpetas: una por segmento (keep), con audio + capturas asociadas.
+   * Si no hay audio del backend pero hay capturas, genera un ZIP solo con capturas.
+   */
+  async function handleDownloadZip(): Promise<void> {
+    const resultUrls =
+      activeJobData?.resultUrls ?? (activeJobData?.resultUrl ? [activeJobData.resultUrl] : []);
+
+    const keepSegments = [...segments]
+      .filter((s) => s.disposition === 'keep')
+      .sort((a, b) => a.start - b.start);
+
+    // Determine if we should use the segment-organized endpoint
+    const hasAudio = resultUrls.length > 0;
+    const hasAnyCaptures = keepSegments.some((s) => s.captures.length > 0);
+
+    if (!hasAudio && !hasAnyCaptures) {
+      setUiError('No hay archivos ni capturas disponibles para descargar.');
+      return;
+    }
+
+    setIsDownloadingZip(true);
+    setUiError(null);
+
+    try {
+      const ORDINALS = ['Primer', 'Segundo', 'Tercer', 'Cuarto', 'Quinto',
+                        'Sexto', 'Septimo', 'Octavo', 'Noveno', 'Decimo'];
+
+      const count = Math.max(resultUrls.length, keepSegments.length);
+      const segmentEntries: SegmentZipEntry[] = Array.from({ length: count }, (_, i) => {
+        const seg = keepSegments[i] ?? null;
+        const audioUrl = resultUrls[i] ?? null;
+        const audioFilename = audioUrl ? (audioUrl.split('/').pop() ?? undefined) : undefined;
+        const ordinal = ORDINALS[i] ?? `${i + 1}`;
+        const folderName = `${String(i + 1).padStart(2, '0')} - ${ordinal} corte y capturas`;
+
+        const captures = (seg?.captures ?? []).map((c, ci) => ({
+          name: `captura_${String(ci + 1).padStart(2, '0')}.png`,
+          data: c.dataUrl,
+        }));
+
+        return { folderName, audioFilename, captures };
+      });
+
+      const blob = await downloadSegmentsZip(segmentEntries);
+      const blobUrl = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = blobUrl;
+      anchor.download = 'cortes_y_capturas.zip';
+      document.body.appendChild(anchor);
+      anchor.click();
+      document.body.removeChild(anchor);
+      URL.revokeObjectURL(blobUrl);
+    } catch {
+      // Fall back to simple ZIP if the segment endpoint is unavailable (no backend configured)
+      if (resultUrls.length === 0) {
+        setUiError('Configura VITE_API_BASE_URL para descargar el ZIP de capturas.');
+        return;
+      }
+      const filenames = resultUrls.map((url) => url.split('/').pop() ?? '').filter(Boolean);
+      try {
+        const blob = await downloadZipFile(filenames);
+        const blobUrl = URL.createObjectURL(blob);
+        const anchor = document.createElement('a');
+        anchor.href = blobUrl;
+        anchor.download = 'audios.zip';
+        document.body.appendChild(anchor);
+        anchor.click();
+        document.body.removeChild(anchor);
+        URL.revokeObjectURL(blobUrl);
+      } catch (fallbackErr) {
+        setUiError(fallbackErr instanceof Error ? fallbackErr.message : 'Error al descargar ZIP');
+      }
+    } finally {
+      setIsDownloadingZip(false);
+    }
+  }
+
   return (
     <div className="min-h-screen bg-app pb-8 pt-5 text-slate-900 dark:text-slate-100">
       <div className="mx-auto max-w-[1600px] px-4 lg:px-8">
@@ -415,11 +633,8 @@ export function EditorPage() {
           isTusEnabled={isTusEnabled}
           activeJob={activeJobData}
           exporting={exportMutation.isPending}
-          extractingAudio={extractAudioMutation.isPending}
-          audioExtracted={audioExtracted}
           onOpenUploader={() => setDashboardOpen(true)}
           onExport={runExportJob}
-          onExtractAudio={runExtractAudio}
           onResetProject={resetProject}
         />
 
@@ -503,23 +718,68 @@ export function EditorPage() {
           </div>
         ) : null}
 
+        {/* Captures-only ZIP: visible when there are captures but no completed backend job */}
+        {segments.some((s) => s.captures.length > 0) && activeJobData?.status !== 'completed' && import.meta.env.VITE_API_BASE_URL ? (
+          <div className="mt-4 rounded-2xl border border-violet-200 bg-violet-50 px-4 py-3 text-sm text-violet-700 dark:border-violet-900/50 dark:bg-violet-950/40 dark:text-violet-400">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <p className="font-medium">
+                Capturas disponibles: {segments.reduce((sum, s) => sum + s.captures.length, 0)} en total
+              </p>
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => void handleDownloadZip()}
+                loading={isDownloadingZip}
+                disabled={isDownloadingZip}
+              >
+                <Archive className="h-4 w-4" aria-hidden="true" />
+                Descargar capturas ZIP
+              </Button>
+            </div>
+          </div>
+        ) : null}
+
         {activeJobData?.status === 'completed' && (activeJobData.resultUrls ?? (activeJobData.resultUrl ? [activeJobData.resultUrl] : [])).length > 0 ? (
           <div className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-950/40 dark:text-emerald-400">
             {(activeJobData.resultUrls ?? [activeJobData.resultUrl!]).length === 1 ? (
-              <a
-                className="inline-flex items-center gap-2 font-semibold underline decoration-emerald-400 underline-offset-2 dark:decoration-emerald-600"
-                href={(activeJobData.resultUrls ?? [activeJobData.resultUrl!])[0]}
-                target="_blank"
-                rel="noreferrer"
-              >
-                <Download className="h-4 w-4" aria-hidden="true" />
-                Abrir resultado procesado
-              </a>
+              <div className="flex flex-wrap items-center gap-3">
+                <a
+                  className="inline-flex items-center gap-2 font-semibold underline decoration-emerald-400 underline-offset-2 dark:decoration-emerald-600"
+                  href={(activeJobData.resultUrls ?? [activeJobData.resultUrl!])[0]}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  <Download className="h-4 w-4" aria-hidden="true" />
+                  Abrir resultado procesado
+                </a>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => void handleDownloadZip()}
+                  loading={isDownloadingZip}
+                  disabled={isDownloadingZip}
+                >
+                  <Archive className="h-4 w-4" aria-hidden="true" />
+                  Descargar ZIP
+                </Button>
+              </div>
             ) : (
-              <div className="space-y-2">
-                <p className="font-semibold">
-                  {(activeJobData.resultUrls ?? []).length} segmentos de audio listos para descargar:
-                </p>
+              <div className="space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <p className="font-semibold">
+                    {(activeJobData.resultUrls ?? []).length} segmentos de audio listos para descargar:
+                  </p>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => void handleDownloadZip()}
+                    loading={isDownloadingZip}
+                    disabled={isDownloadingZip}
+                  >
+                    <Archive className="h-4 w-4" aria-hidden="true" />
+                    Descargar ZIP
+                  </Button>
+                </div>
                 <ul className="space-y-1">
                   {(activeJobData.resultUrls ?? []).map((url, idx) => {
                     const filename = url.split('/').pop() ?? `segmento_${idx + 1}`;
@@ -571,7 +831,36 @@ export function EditorPage() {
               onSetTrimEnd={setTrimEnd}
               onToggleTrackMute={toggleTrackMute}
               onSelectTrack={selectTrack}
+              customExtractionActive={customExtractionMode}
+              validCustomRanges={validCustomRanges}
+              onCustomRangeCreate={handleCustomRangeCreate}
+              extractingAudio={extractAudioMutation.isPending}
+              audioExtracted={audioExtracted}
+              onExtractAudio={runExtractAudio}
+              onCustomExtraction={() => {
+                setCustomExtractionMode((prev) => {
+                  if (!prev) {
+                    setCustomRanges([{ id: createId('range'), start: '', end: '' }]);
+                  }
+                  return !prev;
+                });
+              }}
+              onCapture={handleCapture}
             />
+
+            {/* Inline custom extraction panel — aparece debajo del timeline */}
+            {customExtractionMode ? (
+              <CustomExtractionPanel
+                videoDuration={video?.duration ?? 0}
+                ranges={customRanges}
+                disabled={extractAudioMutation.isPending}
+                onAddRange={handleAddCustomRange}
+                onUpdateRange={handleUpdateCustomRange}
+                onRemoveRange={handleRemoveCustomRange}
+                onExtract={runCustomExtractionJob}
+                onClose={() => setCustomExtractionMode(false)}
+              />
+            ) : null}
           </div>
 
           <div className="space-y-5">
@@ -582,6 +871,7 @@ export function EditorPage() {
               onSeek={setPlayheadTime}
               onSetSelectedDisposition={setSelectedSegmentDisposition}
               onToggleSegmentDisposition={toggleSegmentDisposition}
+              onRemoveCaptureFromSegment={removeCaptureFromSegment}
               onUndo={undo}
               onRedo={redo}
               canUndo={canUndo}
