@@ -1,6 +1,7 @@
 import { FastifyInstance } from 'fastify';
 import path from 'path';
 import fs from 'fs';
+import { PassThrough } from 'stream';
 import archiver from 'archiver';
 import { config } from '../config';
 
@@ -52,11 +53,6 @@ export async function resultRoutes(fastify: FastifyInstance): Promise<void> {
 
     const archive = archiver('zip', { zlib: { level: 6 } });
 
-    archive.on('error', (err) => {
-      fastify.log.error({ err }, 'Error al crear ZIP de segmentos');
-      reply.raw.destroy(err);
-    });
-
     for (const segment of segments) {
       // Sanitize folder name: keep alphanumeric, spaces, hyphens, underscores
       const folder = path.basename(segment.folderName ?? 'segmento').replace(/[^a-zA-Z0-9 \-_]/g, '');
@@ -80,18 +76,20 @@ export async function resultRoutes(fastify: FastifyInstance): Promise<void> {
       }
     }
 
-    reply.raw.setHeader('Content-Type', 'application/zip');
-    reply.raw.setHeader('Content-Disposition', 'attachment; filename="cortes_y_capturas.zip"');
+    const pass = new PassThrough();
 
-    archive.pipe(reply.raw);
-    void archive.finalize();
-
-    await new Promise<void>((resolve, reject) => {
-      archive.on('finish', resolve);
-      archive.on('error', reject);
+    archive.on('error', (err) => {
+      fastify.log.error({ err }, 'Error al crear ZIP de segmentos');
+      pass.destroy(err);
     });
 
-    return reply;
+    archive.pipe(pass);
+    void archive.finalize();
+
+    reply.header('Content-Type', 'application/zip');
+    reply.header('Content-Disposition', 'attachment; filename="cortes_y_capturas.zip"');
+
+    return reply.send(pass);
   });
 
   // POST /results/zip — empaqueta una lista de archivos en un ZIP y lo devuelve
@@ -115,27 +113,23 @@ export async function resultRoutes(fastify: FastifyInstance): Promise<void> {
 
     const archive = archiver('zip', { zlib: { level: 6 } });
 
-    archive.on('error', (err) => {
-      fastify.log.error({ err }, 'Error al crear ZIP');
-      reply.raw.destroy(err);
-    });
-
     for (const { safeName, filePath } of resolvedPaths) {
       archive.file(filePath, { name: safeName });
     }
 
-    reply.raw.setHeader('Content-Type', 'application/zip');
-    reply.raw.setHeader('Content-Disposition', 'attachment; filename="audios.zip"');
+    const pass = new PassThrough();
 
-    archive.pipe(reply.raw);
-    void archive.finalize();
-
-    // Señalar a Fastify que la respuesta la manejamos nosotros (streaming)
-    await new Promise<void>((resolve, reject) => {
-      archive.on('finish', resolve);
-      archive.on('error', reject);
+    archive.on('error', (err) => {
+      fastify.log.error({ err }, 'Error al crear ZIP');
+      pass.destroy(err);
     });
 
-    return reply;
+    archive.pipe(pass);
+    void archive.finalize();
+
+    reply.header('Content-Type', 'application/zip');
+    reply.header('Content-Disposition', 'attachment; filename="audios.zip"');
+
+    return reply.send(pass);
   });
 }
