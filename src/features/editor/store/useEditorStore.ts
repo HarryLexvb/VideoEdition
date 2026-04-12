@@ -33,6 +33,10 @@ interface EditorStore extends EditorSnapshot {
   clearTrackSelection: () => void;
   addCutAt: (time: number) => void;
   addCutAtPlayhead: () => void;
+  setSegmentsFromCustomRanges: (
+    ranges: Array<{ start: number; end: number }>,
+    selectedRange?: { start: number; end: number },
+  ) => void;
   setSegmentDisposition: (segmentId: string, disposition: SegmentDisposition) => void;
   setSelectedSegmentDisposition: (disposition: SegmentDisposition) => void;
   toggleSegmentDisposition: (segmentId: string) => void;
@@ -124,6 +128,35 @@ function getDurationFromVideo(video: VideoAsset | null): number {
   }
 
   return video.duration;
+}
+
+function normalizeCustomRanges(
+  ranges: Array<{ start: number; end: number }>,
+  duration: number,
+): Array<{ start: number; end: number }> {
+  if (duration <= 0) return [];
+
+  const sorted = ranges
+    .map((r) => ({
+      start: clampTime(Number(r.start), duration),
+      end: clampTime(Number(r.end), duration),
+    }))
+    .filter((r) => Number.isFinite(r.start) && Number.isFinite(r.end) && r.end - r.start > 0.01)
+    .sort((a, b) => a.start - b.start);
+
+  const deduped: Array<{ start: number; end: number }> = [];
+  for (const range of sorted) {
+    const prev = deduped[deduped.length - 1];
+    if (prev && Math.abs(prev.start - range.start) < 0.01 && Math.abs(prev.end - range.end) < 0.01) {
+      continue;
+    }
+    deduped.push({
+      start: Number(range.start.toFixed(3)),
+      end: Number(range.end.toFixed(3)),
+    });
+  }
+
+  return deduped;
 }
 
 function createDefaultSegmentsForVideo(video: VideoAsset | null): TimelineSegment[] {
@@ -314,6 +347,83 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
   addCutAtPlayhead: () => {
     const state = get();
     state.addCutAt(state.playheadTime);
+  },
+
+  setSegmentsFromCustomRanges: (ranges, selectedRange) => {
+    set((state) =>
+      updateWithHistory(state, 'Actualizar segmentos personalizados', (snapshot) => {
+        const duration = getDurationFromVideo(snapshot.video);
+        const normalizedRanges = normalizeCustomRanges(ranges, duration);
+
+        const existingByRangeKey = new Map(
+          snapshot.segments.map((segment) => [
+            `${segment.start.toFixed(3)}-${segment.end.toFixed(3)}`,
+            segment,
+          ]),
+        );
+
+        const nextSegments: TimelineSegment[] = normalizedRanges.map((range) => {
+          const key = `${range.start.toFixed(3)}-${range.end.toFixed(3)}`;
+          const existing = existingByRangeKey.get(key);
+
+          return {
+            id: existing?.id ?? createId('segment'),
+            start: range.start,
+            end: range.end,
+            disposition: 'keep',
+            captures: existing?.captures ?? [],
+          };
+        });
+
+        const unchanged =
+          snapshot.segments.length === nextSegments.length &&
+          snapshot.segments.every((seg, index) => {
+            const next = nextSegments[index];
+            if (!next) return false;
+            return (
+              Math.abs(seg.start - next.start) < 0.001 &&
+              Math.abs(seg.end - next.end) < 0.001 &&
+              seg.disposition === next.disposition
+            );
+          });
+
+        if (unchanged) {
+          return null;
+        }
+
+        let selectedSegmentId: string | null = null;
+
+        if (selectedRange) {
+          const selected = nextSegments.find(
+            (segment) =>
+              Math.abs(segment.start - selectedRange.start) < 0.01 &&
+              Math.abs(segment.end - selectedRange.end) < 0.01,
+          );
+          selectedSegmentId = selected?.id ?? null;
+        }
+
+        if (!selectedSegmentId && snapshot.selectedSegmentId) {
+          const existing = nextSegments.find((segment) => segment.id === snapshot.selectedSegmentId);
+          selectedSegmentId = existing?.id ?? null;
+        }
+
+        if (!selectedSegmentId && nextSegments.length > 0) {
+          selectedSegmentId = nextSegments[0].id;
+        }
+
+        const nextPlayhead =
+          selectedSegmentId !== null
+            ? nextSegments.find((segment) => segment.id === selectedSegmentId)?.start ?? snapshot.playheadTime
+            : snapshot.playheadTime;
+
+        return {
+          ...snapshot,
+          segments: nextSegments,
+          selectedSegmentId,
+          playheadTime: clampTime(nextPlayhead, duration),
+        };
+      }),
+    );
   },
 
   setSegmentDisposition: (segmentId, disposition) => {

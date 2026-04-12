@@ -12,6 +12,27 @@ const MIME_TYPES: Record<string, string> = {
   '.mov': 'video/quicktime',
 };
 
+function toSecondToken(seconds: number | undefined): string | null {
+  if (!Number.isFinite(seconds)) return null;
+  return String(Math.max(0, Math.floor(seconds as number))).padStart(2, '0');
+}
+
+function buildCaptureFilename(
+  segmentStart: number | undefined,
+  segmentEnd: number | undefined,
+  captureIndex: number,
+  fallbackName: string,
+): string {
+  const startToken = toSecondToken(segmentStart);
+  const endToken = toSecondToken(segmentEnd);
+
+  if (!startToken || !endToken) {
+    return fallbackName;
+  }
+
+  return `ss_${startToken}_${endToken}_${String(captureIndex + 1).padStart(2, '0')}.png`;
+}
+
 export async function resultRoutes(fastify: FastifyInstance): Promise<void> {
   // GET /results/:filename — sirve el archivo procesado para descarga
   fastify.get<{ Params: { filename: string } }>('/results/:filename', async (request, reply) => {
@@ -41,6 +62,8 @@ export async function resultRoutes(fastify: FastifyInstance): Promise<void> {
       segments: Array<{
         folderName: string;
         audioFilename?: string;
+        segmentStart?: number;
+        segmentEnd?: number;
         captures?: Array<{ name: string; data: string }>;
       }>;
     };
@@ -67,12 +90,18 @@ export async function resultRoutes(fastify: FastifyInstance): Promise<void> {
       }
 
       // Embed PNG captures from base64 data
-      for (const capture of segment.captures ?? []) {
+      for (const [captureIndex, capture] of (segment.captures ?? []).entries()) {
         const safeCaptName = path.basename(String(capture.name)).replace(/[^a-zA-Z0-9.\-_]/g, '') || 'captura.png';
+        const finalName = buildCaptureFilename(
+          segment.segmentStart,
+          segment.segmentEnd,
+          captureIndex,
+          safeCaptName,
+        );
         // Strip data URL prefix if present
         const base64Data = String(capture.data).replace(/^data:image\/[^;]+;base64,/, '');
         const buffer = Buffer.from(base64Data, 'base64');
-        archive.append(buffer, { name: `${folder}/${safeCaptName}` });
+        archive.append(buffer, { name: `${folder}/${finalName}` });
       }
     }
 
@@ -87,7 +116,7 @@ export async function resultRoutes(fastify: FastifyInstance): Promise<void> {
     void archive.finalize();
 
     reply.header('Content-Type', 'application/zip');
-    reply.header('Content-Disposition', 'attachment; filename="cortes_y_capturas.zip"');
+    reply.header('Content-Disposition', 'attachment; filename="segmentos.zip"');
 
     return reply.send(pass);
   });

@@ -17,7 +17,7 @@ services:
       RESULTS_DIR: /app/results
       TEMP_DIR: /app/temp
       CORS_ORIGIN: '*'
-      PUBLIC_API_URL: 'http://localhost:3000'
+      PUBLIC_API_URL: 'http://127.0.0.1:3000'
     depends_on:
       - tusd
     restart: unless-stopped
@@ -43,6 +43,9 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.web
+      args:
+        VITE_API_BASE_URL: http://127.0.0.1:3000
+        VITE_TUS_ENDPOINT: http://127.0.0.1:1080/files/
     container_name: videoedition-web
     ports:
       - '80:80'

@@ -7,7 +7,7 @@ import { StatusBadge } from '../../../shared/components/StatusBadge';
 import { Button } from '../../../shared/components/Button';
 import { createId } from '../../../shared/lib/id';
 import { useProcessingJob, useStartExportJob, useStartExtractAudioJob } from '../api/hooks';
-import { downloadSegmentsZip, downloadZipFile } from '../api/client';
+import { buildSegmentsZipLocally, downloadSegmentsZip, downloadZipFile } from '../api/client';
 import type { SegmentZipEntry } from '../api/client';
 import { HeaderBar } from '../components/HeaderBar';
 import { CustomExtractionPanel, type CustomRange } from '../components/CustomExtractionPanel';
@@ -77,6 +77,7 @@ export function EditorPage() {
   const selectTrack = useEditorStore((state) => state.selectTrack);
   const addCaptureToSegment = useEditorStore((state) => state.addCaptureToSegment);
   const removeCaptureFromSegment = useEditorStore((state) => state.removeCaptureFromSegment);
+  const setSegmentsFromCustomRanges = useEditorStore((state) => state.setSegmentsFromCustomRanges);
 
   const historyPast = useMemo(() => past.map((record) => record.history), [past]);
   const historyFuture = useMemo(() => future.map((record) => record.history), [future]);
@@ -317,8 +318,33 @@ export function EditorPage() {
     if (!customExtractionMode) return [];
     return customRanges
       .map((r) => ({ id: r.id, start: parseFloat(r.start), end: parseFloat(r.end) }))
-      .filter((r) => !isNaN(r.start) && !isNaN(r.end) && r.end > r.start && r.start >= 0);
+      .filter((r) => !isNaN(r.start) && !isNaN(r.end) && r.end > r.start && r.start >= 0)
+      .sort((a, b) => a.start - b.start);
   }, [customExtractionMode, customRanges]);
+
+  const parseValidCustomRanges = useCallback((ranges: CustomRange[]): Array<{ start: number; end: number }> => {
+    const duration = video?.duration ?? 0;
+    if (duration <= 0) return [];
+
+    const parsed = ranges
+      .map((r) => ({ start: parseFloat(r.start), end: parseFloat(r.end) }))
+      .filter((r) => !isNaN(r.start) && !isNaN(r.end) && r.start >= 0 && r.end > r.start && r.end <= duration)
+      .sort((a, b) => a.start - b.start);
+
+    const nonOverlapping: Array<{ start: number; end: number }> = [];
+    for (const range of parsed) {
+      const previous = nonOverlapping[nonOverlapping.length - 1];
+      if (previous && range.start < previous.end - 0.001) {
+        continue;
+      }
+      nonOverlapping.push({
+        start: Number(range.start.toFixed(3)),
+        end: Number(range.end.toFixed(3)),
+      });
+    }
+
+    return nonOverlapping;
+  }, [video?.duration]);
 
   const handleAddCustomRange = useCallback(() => {
     setCustomRanges((prev) => [...prev, { id: createId('range'), start: '', end: '' }]);
@@ -326,33 +352,68 @@ export function EditorPage() {
 
   const handleUpdateCustomRange = useCallback(
     (id: string, field: 'start' | 'end', value: string) => {
-      setCustomRanges((prev) =>
-        prev.map((r) => (r.id === id ? { ...r, [field]: value } : r)),
-      );
+      const nextRanges = customRanges.map((r) => (r.id === id ? { ...r, [field]: value } : r));
+      setCustomRanges(nextRanges);
+      setSegmentsFromCustomRanges(parseValidCustomRanges(nextRanges));
     },
-    [],
+    [customRanges, parseValidCustomRanges, setSegmentsFromCustomRanges],
   );
 
   const handleRemoveCustomRange = useCallback((id: string) => {
-    setCustomRanges((prev) => {
-      if (prev.length === 1) return prev;
-      return prev.filter((r) => r.id !== id);
-    });
-  }, []);
+    if (customRanges.length === 1) return;
+
+    const nextRanges = customRanges.filter((r) => r.id !== id);
+    setCustomRanges(nextRanges);
+    setSegmentsFromCustomRanges(parseValidCustomRanges(nextRanges));
+  }, [customRanges, parseValidCustomRanges, setSegmentsFromCustomRanges]);
 
   /** Called by TimelinePanel when the user finishes a right-click drag. */
   const handleCustomRangeCreate = useCallback(
     (range: { start: number; end: number }) => {
-      setCustomRanges((prev) => [
-        ...prev.filter((r) => r.start.trim() !== '' || r.end.trim() !== ''), // remove empty placeholders
+      const newRange = {
+        start: Number(range.start.toFixed(3)),
+        end: Number(range.end.toFixed(3)),
+      };
+
+      const existing = parseValidCustomRanges(customRanges);
+
+      const duplicated = existing.some(
+        (r) => Math.abs(r.start - newRange.start) < 0.01 && Math.abs(r.end - newRange.end) < 0.01,
+      );
+      if (duplicated) {
+        setUiError('Ese rango ya existe en la lista de segmentos personalizados.');
+        return;
+      }
+
+      const overlaps = existing.some(
+        (r) => newRange.start < r.end - 0.001 && newRange.end > r.start + 0.001,
+      );
+      if (overlaps) {
+        setUiError('El rango se superpone con otro segmento. Ajusta el corte para que no se traslapen.');
+        return;
+      }
+
+      const nextRanges = [
+        ...customRanges.filter((r) => r.start.trim() !== '' || r.end.trim() !== ''),
         {
           id: createId('range'),
-          start: String(range.start),
-          end: String(range.end),
+          start: String(newRange.start),
+          end: String(newRange.end),
         },
-      ]);
+      ].sort((a, b) => {
+        const aStart = parseFloat(a.start);
+        const bStart = parseFloat(b.start);
+        if (isNaN(aStart) && isNaN(bStart)) return 0;
+        if (isNaN(aStart)) return 1;
+        if (isNaN(bStart)) return -1;
+        return aStart - bStart;
+      });
+
+      setUiError(null);
+      setCustomRanges(nextRanges);
+      setSegmentsFromCustomRanges(parseValidCustomRanges(nextRanges), newRange);
     },
-    [],
+    [customRanges, parseValidCustomRanges, setSegmentsFromCustomRanges],
   );
 
   function handleCapture(): void {
@@ -563,57 +624,85 @@ export function EditorPage() {
       return;
     }
 
+    const segmentEntries: SegmentZipEntry[] = keepSegments.length > 0
+      ? keepSegments.map((seg, i) => {
+          const audioUrl = resultUrls[i] ?? null;
+          const audioFilename = audioUrl ? (audioUrl.split('/').pop() ?? undefined) : undefined;
+          const folderName = `segmento${i + 1}`;
+
+          const startToken = String(Math.floor(seg.start)).padStart(2, '0');
+          const endToken = String(Math.floor(seg.end)).padStart(2, '0');
+          const captures = seg.captures.map((c, ci) => ({
+            name: `ss_${startToken}_${endToken}_${String(ci + 1).padStart(2, '0')}.png`,
+            data: c.dataUrl,
+          }));
+
+          return {
+            folderName,
+            audioFilename,
+            audioUrl: audioUrl ?? undefined,
+            segmentStart: seg.start,
+            segmentEnd: seg.end,
+            captures,
+          };
+        })
+      : resultUrls.map((url, i) => {
+          const audioFilename = url.split('/').pop() ?? undefined;
+          return {
+            folderName: `segmento${i + 1}`,
+            audioFilename,
+            audioUrl: url,
+            captures: [],
+          };
+        });
+
     setIsDownloadingZip(true);
     setUiError(null);
 
     try {
-      const ORDINALS = ['Primer', 'Segundo', 'Tercer', 'Cuarto', 'Quinto',
-                        'Sexto', 'Septimo', 'Octavo', 'Noveno', 'Decimo'];
-
-      const count = Math.max(resultUrls.length, keepSegments.length);
-      const segmentEntries: SegmentZipEntry[] = Array.from({ length: count }, (_, i) => {
-        const seg = keepSegments[i] ?? null;
-        const audioUrl = resultUrls[i] ?? null;
-        const audioFilename = audioUrl ? (audioUrl.split('/').pop() ?? undefined) : undefined;
-        const ordinal = ORDINALS[i] ?? `${i + 1}`;
-        const folderName = `${String(i + 1).padStart(2, '0')} - ${ordinal} corte y capturas`;
-
-        const captures = (seg?.captures ?? []).map((c, ci) => ({
-          name: `captura_${String(ci + 1).padStart(2, '0')}.png`,
-          data: c.dataUrl,
-        }));
-
-        return { folderName, audioFilename, captures };
-      });
 
       const blob = await downloadSegmentsZip(segmentEntries);
       const blobUrl = URL.createObjectURL(blob);
       const anchor = document.createElement('a');
       anchor.href = blobUrl;
-      anchor.download = 'cortes_y_capturas.zip';
+      anchor.download = 'segmentos.zip';
       document.body.appendChild(anchor);
       anchor.click();
       document.body.removeChild(anchor);
       URL.revokeObjectURL(blobUrl);
     } catch {
-      // Fall back to simple ZIP if the segment endpoint is unavailable (no backend configured)
-      if (resultUrls.length === 0) {
-        setUiError('Configura VITE_API_BASE_URL para descargar el ZIP de capturas.');
-        return;
-      }
-      const filenames = resultUrls.map((url) => url.split('/').pop() ?? '').filter(Boolean);
+      // Fallback local ZIP for captures-only or mixed audio+captures scenarios.
       try {
-        const blob = await downloadZipFile(filenames);
+        const blob = await buildSegmentsZipLocally(segmentEntries);
         const blobUrl = URL.createObjectURL(blob);
         const anchor = document.createElement('a');
         anchor.href = blobUrl;
-        anchor.download = 'audios.zip';
+        anchor.download = 'segmentos.zip';
         document.body.appendChild(anchor);
         anchor.click();
         document.body.removeChild(anchor);
         URL.revokeObjectURL(blobUrl);
-      } catch (fallbackErr) {
-        setUiError(fallbackErr instanceof Error ? fallbackErr.message : 'Error al descargar ZIP');
+      } catch {
+        // Last fallback: audio-only server ZIP if local ZIP generation fails.
+        if (resultUrls.length === 0) {
+          setUiError('No se pudo generar el ZIP local de capturas. Intenta nuevamente.');
+          return;
+        }
+
+        const filenames = resultUrls.map((url) => url.split('/').pop() ?? '').filter(Boolean);
+        try {
+          const blob = await downloadZipFile(filenames);
+          const blobUrl = URL.createObjectURL(blob);
+          const anchor = document.createElement('a');
+          anchor.href = blobUrl;
+          anchor.download = 'segmentos.zip';
+          document.body.appendChild(anchor);
+          anchor.click();
+          document.body.removeChild(anchor);
+          URL.revokeObjectURL(blobUrl);
+        } catch (fallbackErr) {
+          setUiError(fallbackErr instanceof Error ? fallbackErr.message : 'Error al descargar ZIP');
+        }
       }
     } finally {
       setIsDownloadingZip(false);
@@ -719,7 +808,7 @@ export function EditorPage() {
         ) : null}
 
         {/* Captures-only ZIP: visible when there are captures but no completed backend job */}
-        {segments.some((s) => s.captures.length > 0) && activeJobData?.status !== 'completed' && import.meta.env.VITE_API_BASE_URL ? (
+        {segments.some((s) => s.captures.length > 0) && activeJobData?.status !== 'completed' ? (
           <div className="mt-4 rounded-2xl border border-violet-200 bg-violet-50 px-4 py-3 text-sm text-violet-700 dark:border-violet-900/50 dark:bg-violet-950/40 dark:text-violet-400">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <p className="font-medium">

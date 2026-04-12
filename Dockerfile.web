@@ -4,6 +4,12 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm install
 COPY . .
+# En Docker Desktop (Windows), localhost puede resolver a IPv6 (::1)
+# y bloquear llamadas al API mapeado solo por IPv4.
+ARG VITE_API_BASE_URL=http://127.0.0.1:3000
+ARG VITE_TUS_ENDPOINT=http://127.0.0.1:1080/files/
+ENV VITE_API_BASE_URL=${VITE_API_BASE_URL}
+ENV VITE_TUS_ENDPOINT=${VITE_TUS_ENDPOINT}
 # Se usa vite build directamente para evitar que el typecheck
 # bloquee el build de Docker (el CI/CD puede correrlo separado)
 RUN npx vite build

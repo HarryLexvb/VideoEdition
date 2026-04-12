@@ -1,4 +1,5 @@
 import type { EditorJobPayload } from '../model/projectPayload';
+import JSZip from 'jszip';
 
 import type { JobStatusResponse, StartJobResponse } from './types';
 
@@ -69,10 +70,16 @@ export function getJobStatus(jobId: string): Promise<JobStatusResponse> {
 }
 
 export interface SegmentZipEntry {
-  /** Folder name inside the ZIP (e.g. "01 - Primer corte y capturas") */
+  /** Folder name inside the ZIP (e.g. "segmento1") */
   folderName: string;
   /** Audio filename already stored on the server (optional) */
   audioFilename?: string;
+  /** Optional absolute URL to download audio for client-side ZIP fallback */
+  audioUrl?: string;
+  /** Segment start time in seconds (used to build deterministic capture names) */
+  segmentStart?: number;
+  /** Segment end time in seconds (used to build deterministic capture names) */
+  segmentEnd?: number;
   /** PNG captures as data URLs to embed in the ZIP */
   captures: Array<{ name: string; data: string }>;
 }
@@ -101,6 +108,51 @@ export async function downloadSegmentsZip(segments: SegmentZipEntry[]): Promise<
   }
 
   return response.blob();
+}
+
+function decodeBase64(base64: string): Uint8Array {
+  const raw = atob(base64);
+  const out = new Uint8Array(raw.length);
+  for (let i = 0; i < raw.length; i += 1) {
+    out[i] = raw.charCodeAt(i);
+  }
+  return out;
+}
+
+/**
+ * Fallback local ZIP generation. Useful when backend ZIP endpoint is unavailable
+ * or when app is running without VITE_API_BASE_URL but still needs captures download.
+ */
+export async function buildSegmentsZipLocally(segments: SegmentZipEntry[]): Promise<Blob> {
+  const zip = new JSZip();
+
+  for (let i = 0; i < segments.length; i += 1) {
+    const seg = segments[i];
+    const folderName = (seg.folderName || `segmento${i + 1}`).replace(/[^a-zA-Z0-9_\-]/g, '') || `segmento${i + 1}`;
+    const folder = zip.folder(folderName);
+    if (!folder) continue;
+
+    if (seg.audioUrl) {
+      try {
+        const response = await fetch(seg.audioUrl);
+        if (response.ok) {
+          const audioBlob = await response.blob();
+          folder.file(seg.audioFilename ?? `audio_${i + 1}.mp3`, audioBlob);
+        }
+      } catch {
+        // Continue ZIP creation even if an audio file cannot be fetched.
+      }
+    }
+
+    for (let ci = 0; ci < seg.captures.length; ci += 1) {
+      const capture = seg.captures[ci];
+      const safeName = (capture.name || `captura_${ci + 1}.png`).replace(/[^a-zA-Z0-9.\-_]/g, '');
+      const base64 = String(capture.data).replace(/^data:image\/[^;]+;base64,/, '');
+      folder.file(safeName || `captura_${ci + 1}.png`, decodeBase64(base64));
+    }
+  }
+
+  return zip.generateAsync({ type: 'blob' });
 }
 
 /**
