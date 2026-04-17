@@ -36,6 +36,7 @@ export function EditorPage() {
     { id: createId('range'), start: '', end: '' },
   ]);
   const [isDownloadingZip, setIsDownloadingZip] = useState(false);
+  const [pendingCustomRangeHistorySync, setPendingCustomRangeHistorySync] = useState(false);
 
   const previousObjectUrlRef = useRef<string | null>(null);
   const lastHandledJobStatusRef = useRef<string | null>(null);
@@ -84,6 +85,20 @@ export function EditorPage() {
 
   const canUndo = historyPast.length > 0;
   const canRedo = historyFuture.length > 0;
+
+  const handleUndo = useCallback(() => {
+    if (customExtractionMode) {
+      setPendingCustomRangeHistorySync(true);
+    }
+    undo();
+  }, [customExtractionMode, undo]);
+
+  const handleRedo = useCallback(() => {
+    if (customExtractionMode) {
+      setPendingCustomRangeHistorySync(true);
+    }
+    redo();
+  }, [customExtractionMode, redo]);
 
   const exportMutation = useStartExportJob();
   const extractAudioMutation = useStartExtractAudioJob();
@@ -273,9 +288,9 @@ export function EditorPage() {
 
       event.preventDefault();
       if (event.shiftKey) {
-        redo();
+        handleRedo();
       } else {
-        undo();
+        handleUndo();
       }
     }
 
@@ -284,7 +299,71 @@ export function EditorPage() {
     return () => {
       window.removeEventListener('keydown', handleKeyboardShortcuts);
     };
-  }, [redo, undo]);
+  }, [handleRedo, handleUndo]);
+
+  useEffect(() => {
+    if (!pendingCustomRangeHistorySync) {
+      return;
+    }
+
+    setPendingCustomRangeHistorySync(false);
+
+    if (!customExtractionMode) {
+      return;
+    }
+
+    const duration = video?.duration ?? 0;
+    if (duration <= 0) {
+      setCustomRanges([{ id: createId('range'), start: '', end: '' }]);
+      return;
+    }
+
+    const sortedSegments = [...segments].sort((a, b) => a.start - b.start);
+    if (sortedSegments.length === 0) {
+      setCustomRanges([{ id: createId('range'), start: '', end: '' }]);
+      return;
+    }
+
+    const EPSILON = 0.02;
+    let cursor = 0;
+    let coversWholeTimeline = Math.abs(sortedSegments[0].start) <= EPSILON;
+
+    for (const segment of sortedSegments) {
+      if (!coversWholeTimeline) {
+        break;
+      }
+
+      if (segment.start - cursor > EPSILON) {
+        coversWholeTimeline = false;
+        break;
+      }
+
+      cursor = Math.max(cursor, segment.end);
+    }
+
+    if (duration - cursor > EPSILON) {
+      coversWholeTimeline = false;
+    }
+
+    if (coversWholeTimeline) {
+      setCustomRanges([{ id: createId('range'), start: '', end: '' }]);
+      return;
+    }
+
+    const rebuiltRanges = sortedSegments
+      .filter((segment) => segment.end - segment.start > 0.01)
+      .map((segment) => ({
+        id: createId('range'),
+        start: Number(segment.start.toFixed(3)).toString(),
+        end: Number(segment.end.toFixed(3)).toString(),
+      }));
+
+    setCustomRanges(
+      rebuiltRanges.length > 0
+        ? rebuiltRanges
+        : [{ id: createId('range'), start: '', end: '' }],
+    );
+  }, [customExtractionMode, pendingCustomRangeHistorySync, segments, video?.duration]);
 
   useEffect(() => {
     const jobStatus = jobStatusQuery.data;
@@ -961,8 +1040,8 @@ export function EditorPage() {
               onSetSelectedDisposition={setSelectedSegmentDisposition}
               onToggleSegmentDisposition={toggleSegmentDisposition}
               onRemoveCaptureFromSegment={removeCaptureFromSegment}
-              onUndo={undo}
-              onRedo={redo}
+              onUndo={handleUndo}
+              onRedo={handleRedo}
               canUndo={canUndo}
               canRedo={canRedo}
               historyPast={historyPast}

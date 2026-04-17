@@ -96,7 +96,7 @@ export function HeaderBar({
               <div className="rounded-lg bg-white/20 p-1.5 backdrop-blur-sm">
                 <Video className="h-4 w-4" aria-hidden="true" />
               </div>
-              <span className="text-sm font-bold tracking-wide">Cargar Video</span>
+              <span className="text-sm font-bold tracking-wide">1. Cargar Video</span>
               <Upload className="h-4 w-4 transition-transform duration-300 group-hover:-translate-y-0.5" aria-hidden="true" />
             </div>
 
@@ -106,7 +106,7 @@ export function HeaderBar({
 
           <Button onClick={onExport} loading={exporting} disabled={!video}>
             <Download className="h-4 w-4" aria-hidden="true" />
-            Exportar
+            5. Exportar
           </Button>
           <Button variant="ghost" onClick={onResetProject} disabled={!video}>
             <RotateCcw className="h-4 w-4" aria-hidden="true" />

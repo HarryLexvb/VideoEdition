@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 
-import { Activity, AudioLines, Camera, Film, Layers, Music2, Scissors, Volume2, VolumeX } from 'lucide-react';
+import { Activity, AudioLines, Camera, Check, ChevronDown, Film, Layers, Music2, Scissors, Volume2, VolumeX } from 'lucide-react';
 
 import { Button } from '../../../shared/components/Button';
 import { formatTime } from '../../../shared/lib/formatTime';
@@ -401,11 +401,14 @@ export function TimelinePanel({
 }: TimelinePanelProps) {
   const scrubberRef = useRef<HTMLDivElement | null>(null);
   const tracksContainerRef = useRef<HTMLDivElement | null>(null);
-
+  const cutMenuRef = useRef<HTMLDivElement | null>(null);
   // Local drag state (ref avoids re-renders during drag)
   const dragRef = useRef<{ startTime: number } | null>(null);
   // Draft range for live visual feedback during drag
   const [draftRange, setDraftRange] = useState<DraftRange | null>(null);
+  // Unified cut mode menu
+  const [cutMenuOpen, setCutMenuOpen] = useState(false);
+  const [isPlayheadModeEnabled, setIsPlayheadModeEnabled] = useState(false);
 
   const keepCount = useMemo(() => segments.filter((s) => s.disposition === 'keep').length, [segments]);
   const removeCount = useMemo(() => segments.filter((s) => s.disposition === 'remove').length, [segments]);
@@ -417,6 +420,24 @@ export function TimelinePanel({
     const videoTrack = tracks.find((t) => t.kind === 'video');
     if (videoTrack) mediaElement.muted = videoTrack.muted;
   }, [mediaElement, tracks]);
+
+  // ── Close cut dropdown on outside click ─────────────────────────
+  useEffect(() => {
+    if (!cutMenuOpen) return;
+    function handleOutside(e: MouseEvent) {
+      if (cutMenuRef.current && !cutMenuRef.current.contains(e.target as Node)) {
+        setCutMenuOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleOutside);
+    return () => document.removeEventListener('mousedown', handleOutside);
+  }, [cutMenuOpen]);
+
+  useEffect(() => {
+    if (customExtractionActive) {
+      setIsPlayheadModeEnabled(false);
+    }
+  }, [customExtractionActive]);
 
   // ── Cancel drag on global mouseup (e.g. mouse released outside) ─
   useEffect(() => {
@@ -503,7 +524,7 @@ export function TimelinePanel({
   return (
     <section className="rounded-3xl border border-white/50 bg-gradient-to-br from-white/90 via-white/75 to-white/85 p-5 shadow-[0_25px_60px_-40px_rgba(15,23,42,0.75)] backdrop-blur-xl dark:border-slate-700/50 dark:from-slate-800/95 dark:via-slate-800/80 dark:to-slate-800/90">
       {/* Header */}
-      <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 className="flex items-center gap-2 font-display text-lg font-semibold text-slate-900 dark:text-slate-100">
             <Layers className="h-5 w-5 text-brand-600 dark:text-brand-500" aria-hidden="true" />
@@ -540,16 +561,103 @@ export function TimelinePanel({
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          {customExtractionActive && (
-            <span className="hidden text-xs text-amber-600 dark:text-amber-400 sm:block">
-              Clic derecho + arrastrar para marcar rangos
-            </span>
-          )}
           <div className="inline-flex items-center gap-1 rounded-xl bg-slate-100/80 p-1 shadow-inner ring-1 ring-slate-200/70 dark:bg-slate-800/60 dark:ring-slate-700/50">
-            <Button size="sm" onClick={onCutAtPlayhead} disabled={duration <= 0}>
-              <Scissors className="h-3.5 w-3.5" aria-hidden="true" />
-              Cortar en cabezal
-            </Button>
+            {/* ── Unified cut mode selector ── */}
+            <div className="relative" ref={cutMenuRef}>
+              <Button
+                size="sm"
+                variant={customExtractionActive ? 'amber' : 'primary'}
+                onClick={() => setCutMenuOpen((o) => !o)}
+                disabled={duration <= 0 || extractingAudio}
+                aria-haspopup="listbox"
+                aria-expanded={cutMenuOpen}
+              >
+                <Scissors className="h-3.5 w-3.5" aria-hidden="true" />
+                2. Cortar
+                <ChevronDown
+                  className={`h-3 w-3 transition-transform duration-150 ${cutMenuOpen ? 'rotate-180' : ''}`}
+                  aria-hidden="true"
+                />
+              </Button>
+
+              {cutMenuOpen && (
+                <div
+                  role="listbox"
+                  aria-label="Modo de corte"
+                  className="absolute left-0 top-full z-50 mt-1.5 w-72 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl ring-1 ring-black/5 dark:border-slate-700 dark:bg-slate-800 dark:ring-white/5"
+                >
+                  <p className="border-b border-slate-100 px-4 py-2.5 text-[11px] font-semibold uppercase tracking-widest text-slate-400 dark:border-slate-700 dark:text-slate-500">
+                    Selecciona un modo
+                  </p>
+
+                  {/* Option 1 — Cortar en cabezal */}
+                  <button
+                    role="option"
+                    aria-selected={isPlayheadModeEnabled && !customExtractionActive}
+                    type="button"
+                    className="group flex w-full cursor-pointer items-start gap-3 px-4 py-3.5 text-left transition-colors hover:bg-brand-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-500 dark:hover:bg-brand-950/40"
+                    onClick={() => {
+                      if (customExtractionActive) onCustomExtraction?.();
+                      setIsPlayheadModeEnabled(true);
+                      setCutMenuOpen(false);
+                    }}
+                  >
+                    <span className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border-2 transition-colors ${(isPlayheadModeEnabled && !customExtractionActive) ? 'border-brand-600 bg-brand-600 dark:border-brand-400 dark:bg-brand-400' : 'border-slate-300 bg-white group-hover:border-brand-400 dark:border-slate-600 dark:bg-slate-800'}`}>
+                      {(isPlayheadModeEnabled && !customExtractionActive) && <Check className="h-2.5 w-2.5 text-white" strokeWidth={3} />}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <span className="block text-sm font-semibold text-slate-900 dark:text-slate-100">
+                        Cortar en cabezal
+                      </span>
+                      <span className="mt-0.5 block text-xs leading-relaxed text-slate-500 dark:text-slate-400">
+                        Divide el video en la posición exacta del cabezal de reproducción.
+                      </span>
+                    </div>
+                  </button>
+
+                  <div className="mx-4 border-t border-slate-100 dark:border-slate-700" />
+
+                  {/* Option 2 — Extraccion personalizada */}
+                  <button
+                    role="option"
+                    aria-selected={customExtractionActive}
+                    type="button"
+                    className="group flex w-full cursor-pointer items-start gap-3 px-4 py-3.5 text-left transition-colors hover:bg-amber-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-amber-500 dark:hover:bg-amber-950/30"
+                    onClick={() => {
+                      if (!customExtractionActive) onCustomExtraction?.();
+                      setIsPlayheadModeEnabled(false);
+                      setCutMenuOpen(false);
+                    }}
+                  >
+                    <span className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border-2 transition-colors ${customExtractionActive ? 'border-amber-500 bg-amber-500 dark:border-amber-400 dark:bg-amber-400' : 'border-slate-300 bg-white group-hover:border-amber-400 dark:border-slate-600 dark:bg-slate-800'}`}>
+                      {customExtractionActive && <Check className="h-2.5 w-2.5 text-white" strokeWidth={3} />}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <span className="block text-sm font-semibold text-slate-900 dark:text-slate-100">
+                        Extraccion personalizada
+                      </span>
+                      <span className="mt-0.5 block text-xs leading-relaxed text-slate-500 dark:text-slate-400">
+                        Define rangos de tiempo específicos arrastrando en el timeline o ingresándolos manualmente.
+                      </span>
+                    </div>
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {isPlayheadModeEnabled && !customExtractionActive && (
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={onCutAtPlayhead}
+                disabled={duration <= 0 || extractingAudio}
+                title="Ejecutar corte en la posicion actual del cabezal"
+              >
+                <Scissors className="h-3.5 w-3.5" aria-hidden="true" />
+                Cortar ahora
+              </Button>
+            )}
+
             <Button
               size="sm"
               variant="secondary"
@@ -558,7 +666,7 @@ export function TimelinePanel({
               title={!selectedSegmentId ? 'Selecciona un segmento para asociar la captura' : 'Capturar fotograma actual'}
             >
               <Camera className="h-3.5 w-3.5" aria-hidden="true" />
-              Captura
+              3. Captura
             </Button>
             <div className="mx-0.5 h-5 w-px bg-slate-300/70 dark:bg-slate-600/70" aria-hidden="true" />
             <Button
@@ -569,20 +677,39 @@ export function TimelinePanel({
               disabled={duration <= 0 || extractingAudio || audioExtracted}
             >
               <AudioLines className="h-3.5 w-3.5" aria-hidden="true" />
-              {audioExtracted ? 'Audio extraido' : 'Extraer audio'}
-            </Button>
-            <Button
-              size="sm"
-              variant={customExtractionActive ? 'amber' : 'secondary'}
-              onClick={onCustomExtraction}
-              disabled={duration <= 0 || extractingAudio}
-            >
-              <Scissors className="h-3.5 w-3.5" aria-hidden="true" />
-              Extraccion personalizada
+              {audioExtracted ? '4. Audio extraido' : '4. Extraer audio'}
             </Button>
           </div>
         </div>
+
       </div>
+
+      {/* ── Mode context card — full-width, outside header row ── */}
+      {customExtractionActive ? (
+        <div className="mb-4 flex items-start gap-3 rounded-2xl border border-amber-200/70 bg-amber-50/80 px-4 py-3.5 dark:border-amber-800/40 dark:bg-amber-950/20">
+          <div className="mt-0.5 shrink-0 rounded-lg bg-amber-100 p-1.5 dark:bg-amber-900/40">
+            <Scissors className="h-4 w-4 text-amber-700 dark:text-amber-400" aria-hidden="true" />
+          </div>
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">Extraccion personalizada activa</p>
+            <p className="mt-0.5 text-xs leading-relaxed text-amber-700/90 dark:text-amber-400">
+              Arrastra con <strong>clic derecho</strong> en el timeline para marcar rangos, o ingrésalos manualmente en el panel inferior. Solo se extraeran los segmentos seleccionados.
+            </p>
+          </div>
+        </div>
+      ) : isPlayheadModeEnabled ? (
+        <div className="mb-4 flex items-start gap-3 rounded-2xl border border-brand-200/70 bg-brand-50/80 px-4 py-3.5 dark:border-brand-800/40 dark:bg-brand-950/20">
+          <div className="mt-0.5 shrink-0 rounded-lg bg-brand-100 p-1.5 dark:bg-brand-900/40">
+            <Scissors className="h-4 w-4 text-brand-700 dark:text-brand-400" aria-hidden="true" />
+          </div>
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-brand-800 dark:text-brand-300">Modo: Cortar en cabezal</p>
+            <p className="mt-0.5 text-xs leading-relaxed text-brand-700/90 dark:text-brand-400">
+              Posiciona el cabezal en el punto deseado y presiona <strong>Cortar ahora</strong> para dividir el video. Cada corte crea segmentos que puedes marcar como conservar o eliminar.
+            </p>
+          </div>
+        </div>
+      ) : null}
 
       {hasTracks ? (
         <div className="space-y-3 rounded-2xl border border-slate-200/80 bg-gradient-to-b from-slate-50 to-slate-100/80 p-4 shadow-inner dark:border-slate-700/50 dark:from-slate-900 dark:to-slate-900/80">
