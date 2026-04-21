@@ -1,14 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import Dashboard from '@uppy/react/dashboard';
-import { AlertCircle, Archive, Download, FileVideo, MousePointerClick, Sparkles, Upload as UploadIcon } from 'lucide-react';
+import { AlertCircle, Archive, Download, FileVideo, MousePointerClick, Sparkles, Upload as UploadIcon, FileText } from 'lucide-react';
 
 import { StatusBadge } from '../../../shared/components/StatusBadge';
 import { Button } from '../../../shared/components/Button';
 import { createId } from '../../../shared/lib/id';
-import { useProcessingJob, useStartExportJob, useStartExtractAudioJob } from '../api/hooks';
+import { useProcessingJob, useStartExportJob, useStartExtractAudioJob, useStartTranscribeJob } from '../api/hooks';
 import { buildSegmentsZipLocally, downloadSegmentsZip, downloadZipFile } from '../api/client';
 import type { SegmentZipEntry } from '../api/client';
+import type { TranscriptionSegment } from '../api/types';
 import { HeaderBar } from '../components/HeaderBar';
 import { CustomExtractionPanel, type CustomRange } from '../components/CustomExtractionPanel';
 import { SidebarPanel } from '../components/SidebarPanel';
@@ -25,6 +26,36 @@ interface ActiveJobContext {
   jobId: string;
 }
 
+function TranscriptionButton({
+  onClick,
+  isPending,
+  jobStatus,
+  hasResult,
+}: {
+  onClick: () => void;
+  isPending: boolean;
+  jobStatus?: string;
+  hasResult: boolean;
+}) {
+  const isRunning = isPending || jobStatus === 'queued' || jobStatus === 'processing';
+
+  if (hasResult) {
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-100 px-2.5 py-1.5 text-xs font-medium text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">
+        <FileText className="h-3.5 w-3.5" aria-hidden="true" />
+        Transcripción lista
+      </span>
+    );
+  }
+
+  return (
+    <Button size="sm" variant="secondary" onClick={onClick} loading={isRunning} disabled={isRunning}>
+      <FileText className="h-4 w-4" aria-hidden="true" />
+      {isRunning ? 'Transcribiendo...' : 'Transcripción'}
+    </Button>
+  );
+}
+
 export function EditorPage() {
   const [mediaElement, setMediaElementState] = useState<HTMLVideoElement | null>(null);
   const [activeJobContext, setActiveJobContext] = useState<ActiveJobContext | null>(null);
@@ -37,9 +68,12 @@ export function EditorPage() {
   ]);
   const [isDownloadingZip, setIsDownloadingZip] = useState(false);
   const [pendingCustomRangeHistorySync, setPendingCustomRangeHistorySync] = useState(false);
+  const [transcriptionJobId, setTranscriptionJobId] = useState<string | null>(null);
+  const [transcriptionSegments, setTranscriptionSegments] = useState<TranscriptionSegment[] | null>(null);
 
   const previousObjectUrlRef = useRef<string | null>(null);
   const lastHandledJobStatusRef = useRef<string | null>(null);
+  const lastHandledTranscriptionStatusRef = useRef<string | null>(null);
   const hiddenAudioRef = useRef<HTMLAudioElement | null>(null);
 
   const video = useEditorStore((state) => state.video);
@@ -102,7 +136,9 @@ export function EditorPage() {
 
   const exportMutation = useStartExportJob();
   const extractAudioMutation = useStartExtractAudioJob();
+  const transcribeMutation = useStartTranscribeJob();
   const jobStatusQuery = useProcessingJob(activeJobContext?.jobId ?? null);
+  const transcriptionJobStatusQuery = useProcessingJob(transcriptionJobId);
 
   const setMediaElement = useCallback((element: HTMLVideoElement | null) => {
     setMediaElementState(element);
@@ -388,6 +424,25 @@ export function EditorPage() {
     }
   }, [jobStatusQuery.data]);
 
+  useEffect(() => {
+    const jobStatus = transcriptionJobStatusQuery.data;
+    if (!jobStatus) return;
+
+    const statusKey = `${jobStatus.jobId}:${jobStatus.status}`;
+    if (lastHandledTranscriptionStatusRef.current === statusKey) return;
+    lastHandledTranscriptionStatusRef.current = statusKey;
+
+    if (jobStatus.status === 'completed') {
+      setTranscriptionSegments(jobStatus.transcriptionSegments ?? null);
+      setUiMessage('Transcripción completada. Se incluirá automáticamente en el próximo ZIP que descargues.');
+      setUiError(null);
+    }
+
+    if (jobStatus.status === 'failed') {
+      setUiError(jobStatus.error ?? 'Error en la transcripción con Whisper.');
+    }
+  }, [transcriptionJobStatusQuery.data]);
+
   const activeJobData = useMemo(() => jobStatusQuery.data ?? null, [jobStatusQuery.data]);
 
   // ── Custom ranges CRUD ────────────────────────────────────────────
@@ -598,6 +653,8 @@ export function EditorPage() {
           extractAudioMutation.mutate(payload, {
             onSuccess: (response) => {
               setActiveJobContext({ action: 'extract-audio', jobId: response.jobId });
+              setTranscriptionJobId(null);
+              setTranscriptionSegments(null);
               setUiMessage('Audio extraido localmente + tarea backend iniciada. Seguimiento activo por polling.');
             },
             onError: () => {
@@ -671,6 +728,8 @@ export function EditorPage() {
     extractAudioMutation.mutate(payload, {
       onSuccess: (response) => {
         setActiveJobContext({ action: 'extract-audio', jobId: response.jobId });
+        setTranscriptionJobId(null);
+        setTranscriptionSegments(null);
         setUiMessage(
           `Extraccion personalizada enviada (${ranges.length} segmento(s)). Seguimiento activo por polling.`
         );
@@ -679,6 +738,56 @@ export function EditorPage() {
         setUiError(error.message);
       },
     });
+  }
+
+  function formatTimestamp(seconds: number): string {
+    const m = Math.floor(seconds / 60);
+    const s = Math.floor(seconds % 60);
+    return m > 0 ? `${m}:${String(s).padStart(2, '0')}` : `0:${String(s).padStart(2, '0')}`;
+  }
+
+  function runTranscriptionJob(): void {
+    const resultUrls =
+      activeJobData?.resultUrls ?? (activeJobData?.resultUrl ? [activeJobData.resultUrl] : []);
+
+    if (resultUrls.length === 0) {
+      setUiError('No hay segmentos de audio disponibles para transcribir.');
+      return;
+    }
+
+    const keepSegments = [...segments]
+      .filter((s) => s.disposition === 'keep')
+      .sort((a, b) => a.start - b.start);
+
+    const segmentsToTranscribe = resultUrls
+      .map((url, i) => ({
+        filename: url.split('/').pop() ?? '',
+        start: keepSegments[i]?.start ?? 0,
+        end: keepSegments[i]?.end ?? 0,
+      }))
+      .filter((s) => s.filename.length > 0);
+
+    if (segmentsToTranscribe.length === 0) {
+      setUiError('No se pudieron identificar los archivos de audio para transcribir.');
+      return;
+    }
+
+    setUiError(null);
+    setTranscriptionSegments(null);
+    lastHandledTranscriptionStatusRef.current = null;
+
+    transcribeMutation.mutate(
+      { segments: segmentsToTranscribe },
+      {
+        onSuccess: (response) => {
+          setTranscriptionJobId(response.jobId);
+          setUiMessage(`Transcripción iniciada (${segmentsToTranscribe.length} segmento(s)). Procesando con Whisper...`);
+        },
+        onError: (error) => {
+          setUiError(error.message);
+        },
+      },
+    );
   }
 
   /**
@@ -735,12 +844,24 @@ export function EditorPage() {
           };
         });
 
+    // Construir texto de transcripción si está disponible
+    let transcriptionText: string | undefined;
+    if (transcriptionSegments && transcriptionSegments.length > 0) {
+      transcriptionText = transcriptionSegments
+        .map((seg, i) => {
+          const startLabel = formatTimestamp(seg.start);
+          const endLabel = formatTimestamp(seg.end);
+          return `=== Segmento ${i + 1} (${startLabel} - ${endLabel}) ===\n${seg.text}`;
+        })
+        .join('\n\n');
+    }
+
     setIsDownloadingZip(true);
     setUiError(null);
 
     try {
 
-      const blob = await downloadSegmentsZip(segmentEntries);
+      const blob = await downloadSegmentsZip(segmentEntries, transcriptionText);
       const blobUrl = URL.createObjectURL(blob);
       const anchor = document.createElement('a');
       anchor.href = blobUrl;
@@ -752,7 +873,7 @@ export function EditorPage() {
     } catch {
       // Fallback local ZIP for captures-only or mixed audio+captures scenarios.
       try {
-        const blob = await buildSegmentsZipLocally(segmentEntries);
+        const blob = await buildSegmentsZipLocally(segmentEntries, transcriptionText);
         const blobUrl = URL.createObjectURL(blob);
         const anchor = document.createElement('a');
         anchor.href = blobUrl;
@@ -928,8 +1049,14 @@ export function EditorPage() {
                   disabled={isDownloadingZip}
                 >
                   <Archive className="h-4 w-4" aria-hidden="true" />
-                  Descargar ZIP
+                  {transcriptionSegments ? 'Descargar ZIP + Transcripción' : 'Descargar ZIP'}
                 </Button>
+                <TranscriptionButton
+                  onClick={runTranscriptionJob}
+                  isPending={transcribeMutation.isPending}
+                  jobStatus={transcriptionJobStatusQuery.data?.status}
+                  hasResult={Boolean(transcriptionSegments)}
+                />
               </div>
             ) : (
               <div className="space-y-3">
@@ -937,16 +1064,24 @@ export function EditorPage() {
                   <p className="font-semibold">
                     {(activeJobData.resultUrls ?? []).length} segmentos de audio listos para descargar:
                   </p>
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    onClick={() => void handleDownloadZip()}
-                    loading={isDownloadingZip}
-                    disabled={isDownloadingZip}
-                  >
-                    <Archive className="h-4 w-4" aria-hidden="true" />
-                    Descargar ZIP
-                  </Button>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <TranscriptionButton
+                      onClick={runTranscriptionJob}
+                      isPending={transcribeMutation.isPending}
+                      jobStatus={transcriptionJobStatusQuery.data?.status}
+                      hasResult={Boolean(transcriptionSegments)}
+                    />
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => void handleDownloadZip()}
+                      loading={isDownloadingZip}
+                      disabled={isDownloadingZip}
+                    >
+                      <Archive className="h-4 w-4" aria-hidden="true" />
+                      {transcriptionSegments ? 'Descargar ZIP + Transcripción' : 'Descargar ZIP'}
+                    </Button>
+                  </div>
                 </div>
                 <ul className="space-y-1">
                   {(activeJobData.resultUrls ?? []).map((url, idx) => {

@@ -6,6 +6,13 @@ export interface StartJobResponse {
   message?: string;
 }
 
+export interface TranscriptionSegment {
+  filename: string;
+  start: number;
+  end: number;
+  text: string;
+}
+
 export interface JobStatusResponse {
   jobId: string;
   status: ProcessingStatus;
@@ -13,6 +20,8 @@ export interface JobStatusResponse {
   resultUrl?: string;
   /** URLs de cada segmento de audio exportado (extract-audio con múltiples segmentos) */
   resultUrls?: string[];
+  /** Transcripciones por segmento (job type: transcribe) */
+  transcriptionSegments?: TranscriptionSegment[];
   error?: string;
   message?: string;
 }

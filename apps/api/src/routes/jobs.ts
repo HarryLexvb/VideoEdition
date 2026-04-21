@@ -3,7 +3,8 @@ import { v4 as uuidv4 } from 'uuid';
 import { config } from '../config';
 import { jobStore } from '../services/jobStore';
 import { exportVideo, extractAudioSegments } from '../services/ffmpeg';
-import { Job, JobPayload } from '../types';
+import { transcribeAudioSegments } from '../services/transcription';
+import { Job, JobPayload, TranscribeJobPayload } from '../types';
 
 export async function jobRoutes(fastify: FastifyInstance): Promise<void> {
   // POST /jobs/export
@@ -63,6 +64,33 @@ export async function jobRoutes(fastify: FastifyInstance): Promise<void> {
     });
   });
 
+  // POST /jobs/transcribe
+  fastify.post<{ Body: TranscribeJobPayload }>('/jobs/transcribe', async (request, reply) => {
+    const payload = request.body;
+
+    if (!Array.isArray(payload?.segments) || payload.segments.length === 0) {
+      return reply.status(400).send({ error: 'El campo segments es requerido y debe contener al menos un elemento' });
+    }
+
+    const job: Job = {
+      id: uuidv4(),
+      type: 'transcribe',
+      status: 'queued',
+      progress: 0,
+      payload,
+      createdAt: new Date(),
+    };
+
+    jobStore.set(job);
+    void processTranscribeJob(job.id, fastify);
+
+    return reply.status(202).send({
+      jobId: job.id,
+      status: job.status,
+      message: 'Job de transcripción encolado',
+    });
+  });
+
   // GET /jobs/:jobId
   fastify.get<{ Params: { jobId: string } }>('/jobs/:jobId', async (request, reply) => {
     const { jobId } = request.params;
@@ -78,9 +106,37 @@ export async function jobRoutes(fastify: FastifyInstance): Promise<void> {
       progress: job.progress,
       resultUrl: job.resultUrl,
       resultUrls: job.resultUrls,
+      transcriptionSegments: job.transcriptionSegments,
       error: job.error,
     });
   });
+}
+
+async function processTranscribeJob(jobId: string, fastify: FastifyInstance): Promise<void> {
+  const job = jobStore.get(jobId);
+  if (!job) return;
+
+  jobStore.update(jobId, { status: 'processing', progress: 5 });
+  fastify.log.info({ jobId }, 'Iniciando transcripción con Whisper');
+
+  try {
+    const payload = job.payload as TranscribeJobPayload;
+    const onProgress = (p: number): void => { jobStore.update(jobId, { progress: p }); };
+
+    const transcriptionSegments = await transcribeAudioSegments(payload.segments, onProgress);
+
+    jobStore.update(jobId, {
+      status: 'completed',
+      progress: 100,
+      transcriptionSegments,
+    });
+
+    fastify.log.info({ jobId }, 'Transcripción completada');
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Error desconocido en la transcripción';
+    fastify.log.error({ jobId, message }, 'Transcripción fallida');
+    jobStore.update(jobId, { status: 'failed', error: message });
+  }
 }
 
 async function processJob(
@@ -95,7 +151,7 @@ async function processJob(
   fastify.log.info({ jobId, type }, 'Iniciando procesamiento de job');
 
   try {
-    const { source, timeline } = job.payload;
+    const { source, timeline } = job.payload as JobPayload;
     const uploadId = source.uploadId!;
 
     const onProgress = (p: number): void => {

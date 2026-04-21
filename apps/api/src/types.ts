@@ -22,15 +22,28 @@ export interface JobPayload {
   };
 }
 
+export interface TranscriptionSegment {
+  filename: string;
+  start: number;
+  end: number;
+  text: string;
+}
+
+export interface TranscribeJobPayload {
+  segments: Array<{ filename: string; start: number; end: number }>;
+}
+
 export interface Job {
   id: string;
-  type: 'export' | 'extract-audio';
+  type: 'export' | 'extract-audio' | 'transcribe';
   status: ProcessingStatus;
   progress: number;
   resultUrl?: string;
   /** URLs de cada segmento de audio exportado (extract-audio con múltiples segmentos) */
   resultUrls?: string[];
+  /** Transcripciones por segmento (transcribe) */
+  transcriptionSegments?: TranscriptionSegment[];
   error?: string;
-  payload: JobPayload;
+  payload: JobPayload | TranscribeJobPayload;
   createdAt: Date;
 }

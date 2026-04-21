@@ -66,9 +66,10 @@ export async function resultRoutes(fastify: FastifyInstance): Promise<void> {
         segmentEnd?: number;
         captures?: Array<{ name: string; data: string }>;
       }>;
+      transcriptionText?: string;
     };
   }>('/results/zip-segments', async (request, reply) => {
-    const { segments } = request.body ?? {};
+    const { segments, transcriptionText } = request.body ?? {};
 
     if (!Array.isArray(segments) || segments.length === 0) {
       return reply.status(400).send({ error: 'Se requiere al menos un segmento en el campo segments' });
@@ -103,6 +104,11 @@ export async function resultRoutes(fastify: FastifyInstance): Promise<void> {
         const buffer = Buffer.from(base64Data, 'base64');
         archive.append(buffer, { name: `${folder}/${finalName}` });
       }
+    }
+
+    // Adjuntar transcripción como archivo de texto en la raíz del ZIP
+    if (transcriptionText && typeof transcriptionText === 'string' && transcriptionText.trim()) {
+      archive.append(Buffer.from(transcriptionText.trim(), 'utf-8'), { name: 'transcripcion.txt' });
     }
 
     const pass = new PassThrough();

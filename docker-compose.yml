@@ -9,6 +9,8 @@ services:
       - uploads_data:/app/uploads
       - results_data:/app/results
       - temp_data:/app/temp
+    env_file:
+      - ./apps/api/.env
     environment:
       NODE_ENV: production
       PORT: 3000
@@ -16,8 +18,8 @@ services:
       UPLOADS_DIR: /app/uploads
       RESULTS_DIR: /app/results
       TEMP_DIR: /app/temp
-      CORS_ORIGIN: '*'
-      PUBLIC_API_URL: 'http://127.0.0.1:3000'
+      CORS_ORIGIN: '${CORS_ORIGIN:-*}'
+      PUBLIC_API_URL: '${PUBLIC_API_URL:-http://127.0.0.1:3000}'
     depends_on:
       - tusd
     restart: unless-stopped
@@ -44,8 +46,8 @@ services:
       context: .
       dockerfile: Dockerfile.web
       args:
-        VITE_API_BASE_URL: http://127.0.0.1:3000
-        VITE_TUS_ENDPOINT: http://127.0.0.1:1080/files/
+        VITE_API_BASE_URL: '${VITE_API_BASE_URL:-http://127.0.0.1:3000}'
+        VITE_TUS_ENDPOINT: '${VITE_TUS_ENDPOINT:-http://127.0.0.1:1080/files/}'
     container_name: videoedition-web
     ports:
       - '80:80'

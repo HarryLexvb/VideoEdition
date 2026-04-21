@@ -2,7 +2,8 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 
 import type { EditorJobPayload } from '../model/projectPayload';
 
-import { getJobStatus, startExportJob, startExtractAudioJob } from './client';
+import { getJobStatus, startExportJob, startExtractAudioJob, startTranscribeJob } from './client';
+import type { TranscribeJobPayload } from './client';
 import type { JobStatusResponse, StartJobResponse } from './types';
 
 const POLLING_INTERVAL_MS = 2500;
@@ -16,6 +17,12 @@ export function useStartExportJob() {
 export function useStartExtractAudioJob() {
   return useMutation<StartJobResponse, Error, EditorJobPayload>({
     mutationFn: startExtractAudioJob,
+  });
+}
+
+export function useStartTranscribeJob() {
+  return useMutation<StartJobResponse, Error, TranscribeJobPayload>({
+    mutationFn: startTranscribeJob,
   });
 }
 

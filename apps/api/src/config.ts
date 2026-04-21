@@ -14,4 +14,6 @@ export const config = {
   corsOrigin: process.env.CORS_ORIGIN || '*',
   // URL pública de la API — necesaria para construir resultUrl absoluto
   publicUrl: (process.env.PUBLIC_API_URL || 'http://localhost:3000').replace(/\/$/, ''),
+  // OpenAI Whisper — requerido para el endpoint de transcripción
+  openaiApiKey: process.env.OPENAI_API_KEY || '',
 };

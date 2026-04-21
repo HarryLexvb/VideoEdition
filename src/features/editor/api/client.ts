@@ -3,6 +3,10 @@ import JSZip from 'jszip';
 
 import type { JobStatusResponse, StartJobResponse } from './types';
 
+export interface TranscribeJobPayload {
+  segments: Array<{ filename: string; start: number; end: number }>;
+}
+
 class ApiError extends Error {
   status: number;
 
@@ -63,6 +67,13 @@ export function startExtractAudioJob(payload: EditorJobPayload): Promise<StartJo
   });
 }
 
+export function startTranscribeJob(payload: TranscribeJobPayload): Promise<StartJobResponse> {
+  return request<StartJobResponse>('/jobs/transcribe', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
 export function getJobStatus(jobId: string): Promise<JobStatusResponse> {
   return request<JobStatusResponse>(`/jobs/${jobId}`, {
     method: 'GET',
@@ -86,14 +97,17 @@ export interface SegmentZipEntry {
 
 /**
  * Solicita al backend crear un ZIP organizado por segmentos/carpetas,
- * incluyendo audios del servidor y capturas en base64.
+ * incluyendo audios del servidor, capturas en base64, y opcionalmente un txt de transcripción.
  */
-export async function downloadSegmentsZip(segments: SegmentZipEntry[]): Promise<Blob> {
+export async function downloadSegmentsZip(segments: SegmentZipEntry[], transcriptionText?: string): Promise<Blob> {
   const apiBaseUrl = getApiBaseUrl();
+  const body: Record<string, unknown> = { segments };
+  if (transcriptionText) body.transcriptionText = transcriptionText;
+
   const response = await fetch(`${apiBaseUrl}/results/zip-segments`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ segments }),
+    body: JSON.stringify(body),
   });
 
   if (!response.ok) {
@@ -123,7 +137,7 @@ function decodeBase64(base64: string): Uint8Array {
  * Fallback local ZIP generation. Useful when backend ZIP endpoint is unavailable
  * or when app is running without VITE_API_BASE_URL but still needs captures download.
  */
-export async function buildSegmentsZipLocally(segments: SegmentZipEntry[]): Promise<Blob> {
+export async function buildSegmentsZipLocally(segments: SegmentZipEntry[], transcriptionText?: string): Promise<Blob> {
   const zip = new JSZip();
 
   for (let i = 0; i < segments.length; i += 1) {
@@ -150,6 +164,10 @@ export async function buildSegmentsZipLocally(segments: SegmentZipEntry[]): Prom
       const base64 = String(capture.data).replace(/^data:image\/[^;]+;base64,/, '');
       folder.file(safeName || `captura_${ci + 1}.png`, decodeBase64(base64));
     }
+  }
+
+  if (transcriptionText) {
+    zip.file('transcripcion.txt', transcriptionText.trim());
   }
 
   return zip.generateAsync({ type: 'blob' });

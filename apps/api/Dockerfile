@@ -6,7 +6,7 @@ RUN apk add --no-cache ffmpeg
 WORKDIR /app
 
 # Instalar dependencias
-COPY package.json ./
+COPY package*.json ./
 RUN npm install --omit=dev
 
 # Copiar fuentes y compilar
