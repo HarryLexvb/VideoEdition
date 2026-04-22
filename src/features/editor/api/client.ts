@@ -1,6 +1,11 @@
 import type { EditorJobPayload } from '../model/projectPayload';
+import JSZip from 'jszip';
 
 import type { JobStatusResponse, StartJobResponse } from './types';
+
+export interface TranscribeJobPayload {
+  segments: Array<{ filename: string; start: number; end: number }>;
+}
 
 class ApiError extends Error {
   status: number;
@@ -62,8 +67,134 @@ export function startExtractAudioJob(payload: EditorJobPayload): Promise<StartJo
   });
 }
 
+export function startTranscribeJob(payload: TranscribeJobPayload): Promise<StartJobResponse> {
+  return request<StartJobResponse>('/jobs/transcribe', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
 export function getJobStatus(jobId: string): Promise<JobStatusResponse> {
   return request<JobStatusResponse>(`/jobs/${jobId}`, {
     method: 'GET',
   });
+}
+
+export interface SegmentZipEntry {
+  /** Folder name inside the ZIP (e.g. "segmento1") */
+  folderName: string;
+  /** Audio filename already stored on the server (optional) */
+  audioFilename?: string;
+  /** Optional absolute URL to download audio for client-side ZIP fallback */
+  audioUrl?: string;
+  /** Segment start time in seconds (used to build deterministic capture names) */
+  segmentStart?: number;
+  /** Segment end time in seconds (used to build deterministic capture names) */
+  segmentEnd?: number;
+  /** PNG captures as data URLs to embed in the ZIP */
+  captures: Array<{ name: string; data: string }>;
+}
+
+/**
+ * Solicita al backend crear un ZIP organizado por segmentos/carpetas,
+ * incluyendo audios del servidor, capturas en base64, y opcionalmente un txt de transcripción.
+ */
+export async function downloadSegmentsZip(segments: SegmentZipEntry[], transcriptionText?: string): Promise<Blob> {
+  const apiBaseUrl = getApiBaseUrl();
+  const body: Record<string, unknown> = { segments };
+  if (transcriptionText) body.transcriptionText = transcriptionText;
+
+  const response = await fetch(`${apiBaseUrl}/results/zip-segments`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+
+  if (!response.ok) {
+    let message = `Error al crear ZIP de segmentos (${response.status})`;
+    try {
+      const errorBody = (await response.json()) as { message?: string; error?: string };
+      message = errorBody.message ?? errorBody.error ?? message;
+    } catch {
+      // keep generic message
+    }
+    throw new ApiError(message, response.status);
+  }
+
+  return response.blob();
+}
+
+function decodeBase64(base64: string): Uint8Array {
+  const raw = atob(base64);
+  const out = new Uint8Array(raw.length);
+  for (let i = 0; i < raw.length; i += 1) {
+    out[i] = raw.charCodeAt(i);
+  }
+  return out;
+}
+
+/**
+ * Fallback local ZIP generation. Useful when backend ZIP endpoint is unavailable
+ * or when app is running without VITE_API_BASE_URL but still needs captures download.
+ */
+export async function buildSegmentsZipLocally(segments: SegmentZipEntry[], transcriptionText?: string): Promise<Blob> {
+  const zip = new JSZip();
+
+  for (let i = 0; i < segments.length; i += 1) {
+    const seg = segments[i];
+    const folderName = (seg.folderName || `segmento${i + 1}`).replace(/[^a-zA-Z0-9_\-]/g, '') || `segmento${i + 1}`;
+    const folder = zip.folder(folderName);
+    if (!folder) continue;
+
+    if (seg.audioUrl) {
+      try {
+        const response = await fetch(seg.audioUrl);
+        if (response.ok) {
+          const audioBlob = await response.blob();
+          folder.file(seg.audioFilename ?? `audio_${i + 1}.mp3`, audioBlob);
+        }
+      } catch {
+        // Continue ZIP creation even if an audio file cannot be fetched.
+      }
+    }
+
+    for (let ci = 0; ci < seg.captures.length; ci += 1) {
+      const capture = seg.captures[ci];
+      const safeName = (capture.name || `captura_${ci + 1}.png`).replace(/[^a-zA-Z0-9.\-_]/g, '');
+      const base64 = String(capture.data).replace(/^data:image\/[^;]+;base64,/, '');
+      folder.file(safeName || `captura_${ci + 1}.png`, decodeBase64(base64));
+    }
+  }
+
+  if (transcriptionText) {
+    zip.file('transcripcion.txt', transcriptionText.trim());
+  }
+
+  return zip.generateAsync({ type: 'blob' });
+}
+
+/**
+ * Solicita al backend empaquetar los filenames indicados en un ZIP y devuelve el Blob.
+ * Lanza ApiError si el servidor responde con error.
+ */
+export async function downloadZipFile(filenames: string[]): Promise<Blob> {
+  const apiBaseUrl = getApiBaseUrl();
+  const response = await fetch(`${apiBaseUrl}/results/zip`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ filenames }),
+  });
+
+  if (!response.ok) {
+    let message = `Error al crear ZIP (${response.status})`;
+    try {
+      const errorBody = (await response.json()) as { message?: string; error?: string };
+      message = errorBody.message ?? errorBody.error ?? message;
+    } catch {
+      // keep generic message
+    }
+    throw new ApiError(message, response.status);
+  }
+
+  return response.blob();
 }

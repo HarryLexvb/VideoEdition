@@ -1,4 +1,4 @@
-import { History, Redo2, Trash2, Undo2 } from 'lucide-react';
+import { History, Redo2, Trash2, Undo2, X } from 'lucide-react';
 
 import { Button } from '../../../shared/components/Button';
 import { StatusBadge } from '../../../shared/components/StatusBadge';
@@ -13,6 +13,7 @@ interface SidebarPanelProps {
   onSeek: (time: number) => void;
   onSetSelectedDisposition: (disposition: SegmentDisposition) => void;
   onToggleSegmentDisposition: (segmentId: string) => void;
+  onRemoveCaptureFromSegment: (segmentId: string, captureId: string) => void;
   onUndo: () => void;
   onRedo: () => void;
   canUndo: boolean;
@@ -28,6 +29,7 @@ export function SidebarPanel({
   onSeek,
   onSetSelectedDisposition,
   onToggleSegmentDisposition,
+  onRemoveCaptureFromSegment,
   onUndo,
   onRedo,
   canUndo,
@@ -39,6 +41,7 @@ export function SidebarPanel({
 
   return (
     <aside className="space-y-5">
+      {/* ── Fragmento seleccionado ─────────────────────────────────── */}
       <section className="rounded-3xl border border-white/50 bg-white/80 p-4 shadow-[0_20px_50px_-38px_rgba(15,23,42,0.8)]">
         <h2 className="font-display text-lg font-semibold text-slate-900">Fragmento seleccionado</h2>
         {selectedSegment ? (
@@ -70,20 +73,56 @@ export function SidebarPanel({
                 Eliminar
               </Button>
             </div>
+
+            {/* Captures gallery for selected segment */}
+            {selectedSegment.captures.length > 0 ? (
+              <div>
+                <p className="mb-2 text-xs font-semibold text-slate-600">
+                  Capturas ({selectedSegment.captures.length})
+                </p>
+                <div className="grid grid-cols-2 gap-2">
+                  {selectedSegment.captures.map((capture, idx) => (
+                    <div key={capture.id} className="group relative">
+                      <img
+                        src={capture.dataUrl}
+                        alt={`Captura ${idx + 1} del fragmento`}
+                        className="w-full rounded-lg object-cover ring-1 ring-slate-200"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => onRemoveCaptureFromSegment(selectedSegment.id, capture.id)}
+                        className="absolute right-1 top-1 hidden rounded-md bg-rose-600/90 p-0.5 text-white transition hover:bg-rose-700 group-hover:flex"
+                        title="Eliminar captura"
+                        aria-label={`Eliminar captura ${idx + 1}`}
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                      <p className="mt-1 text-center text-[10px] text-slate-500">
+                        {formatTime(capture.videoTime)}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <p className="text-xs text-slate-400">Sin capturas. Usa el boton Captura en la barra del timeline.</p>
+            )}
           </div>
         ) : (
           <p className="mt-3 text-sm text-slate-500">Selecciona un fragmento desde timeline o lista lateral.</p>
         )}
       </section>
 
+      {/* ── Lista de segmentos ─────────────────────────────────────── */}
       <section className="rounded-3xl border border-white/50 bg-white/80 p-4 shadow-[0_20px_50px_-38px_rgba(15,23,42,0.8)]">
         <div className="mb-3 flex items-center justify-between">
           <h2 className="font-display text-lg font-semibold text-slate-900">Segmentos</h2>
           <StatusBadge>{segments.length}</StatusBadge>
         </div>
-        <div className="max-h-72 space-y-2 overflow-auto pr-1">
+        <div className="max-h-96 space-y-2 overflow-auto pr-1">
           {segments.map((segment, index) => {
             const isSelected = segment.id === selectedSegmentId;
+            const captureCount = segment.captures.length;
             return (
               <div
                 key={segment.id}
@@ -108,13 +147,40 @@ export function SidebarPanel({
               >
                 <div className="flex items-center justify-between gap-2">
                   <p className="font-medium text-slate-800">Fragmento {index + 1}</p>
-                  <StatusBadge tone={segment.disposition === 'keep' ? 'success' : 'danger'}>
-                    {segment.disposition === 'keep' ? 'Keep' : 'Remove'}
-                  </StatusBadge>
+                  <div className="flex items-center gap-1.5">
+                    {captureCount > 0 && (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-semibold text-violet-700">
+                        {captureCount} {captureCount === 1 ? 'captura' : 'capturas'}
+                      </span>
+                    )}
+                    <StatusBadge tone={segment.disposition === 'keep' ? 'success' : 'danger'}>
+                      {segment.disposition === 'keep' ? 'Keep' : 'Remove'}
+                    </StatusBadge>
+                  </div>
                 </div>
                 <p className="mt-1 text-xs text-slate-600">
                   {formatTime(segment.start)} - {formatTime(segment.end)}
                 </p>
+
+                {/* Thumbnail strip for captures */}
+                {captureCount > 0 && (
+                  <div className="mt-2 flex flex-wrap gap-1">
+                    {segment.captures.slice(0, 4).map((c) => (
+                      <img
+                        key={c.id}
+                        src={c.dataUrl}
+                        alt=""
+                        className="h-9 w-14 rounded object-cover ring-1 ring-slate-200"
+                      />
+                    ))}
+                    {captureCount > 4 && (
+                      <div className="flex h-9 w-14 items-center justify-center rounded bg-slate-100 text-[10px] font-semibold text-slate-500 ring-1 ring-slate-200">
+                        +{captureCount - 4}
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 <button
                   type="button"
                   className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-slate-600 hover:text-slate-900"
@@ -132,6 +198,7 @@ export function SidebarPanel({
         </div>
       </section>
 
+      {/* ── Historial ─────────────────────────────────────────────── */}
       <section className="rounded-3xl border border-white/50 bg-white/80 p-4 shadow-[0_20px_50px_-38px_rgba(15,23,42,0.8)]">
         <div className="mb-3 flex items-center justify-between">
           <h2 className="font-display text-lg font-semibold text-slate-900">Historial</h2>

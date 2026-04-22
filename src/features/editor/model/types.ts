@@ -1,5 +1,7 @@
 export type SegmentDisposition = 'keep' | 'remove';
 
+export type TrackKind = 'video' | 'audio';
+
 export interface VideoAsset {
   id: string;
   fileName: string;
@@ -10,18 +12,50 @@ export interface VideoAsset {
   uploadId?: string;
 }
 
+/**
+ * A media track on the timeline.
+ * - kind 'video': shows thumbnail strip from canvas frames. muted = true after audio extraction.
+ * - kind 'audio': shows waveform from Web Audio API. carries extracted audio.
+ */
+export interface MediaTrack {
+  id: string;
+  kind: TrackKind;
+  label: string;
+  /** Object URL pointing to the media source for this track */
+  sourceUrl: string;
+  duration: number;
+  /** true = this track's audio output is muted in the preview */
+  muted: boolean;
+}
+
+export interface SegmentCapture {
+  id: string;
+  /** PNG data URL (data:image/png;base64,...) */
+  dataUrl: string;
+  /** Video playhead time when the capture was taken */
+  videoTime: number;
+  /** ISO timestamp of when the capture was taken */
+  timestamp: string;
+}
+
 export interface TimelineSegment {
   id: string;
   start: number;
   end: number;
   disposition: SegmentDisposition;
+  /** Captures (screenshots) associated with this segment */
+  captures: SegmentCapture[];
 }
 
 export interface EditorSnapshot {
   video: VideoAsset | null;
+  tracks: MediaTrack[];
   segments: TimelineSegment[];
   selectedSegmentId: string | null;
+  selectedTrackIds: string[];
   playheadTime: number;
+  trimStart: number | null;
+  trimEnd: number | null;
 }
 
 export interface HistoryRecord {

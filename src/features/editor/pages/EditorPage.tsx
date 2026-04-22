@@ -1,17 +1,24 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import Dashboard from '@uppy/react/dashboard';
-import { AlertCircle, Download, FileVideo, MousePointerClick, Sparkles, Upload as UploadIcon } from 'lucide-react';
+import { AlertCircle, Archive, Download, FileVideo, MousePointerClick, Sparkles, Upload as UploadIcon, FileText } from 'lucide-react';
 
 import { StatusBadge } from '../../../shared/components/StatusBadge';
+import { Button } from '../../../shared/components/Button';
 import { createId } from '../../../shared/lib/id';
-import { useProcessingJob, useStartExportJob, useStartExtractAudioJob } from '../api/hooks';
+import { useProcessingJob, useStartExportJob, useStartExtractAudioJob, useStartTranscribeJob } from '../api/hooks';
+import { buildSegmentsZipLocally, downloadSegmentsZip, downloadZipFile } from '../api/client';
+import type { SegmentZipEntry } from '../api/client';
+import type { TranscriptionSegment } from '../api/types';
 import { HeaderBar } from '../components/HeaderBar';
+import { CustomExtractionPanel, type CustomRange } from '../components/CustomExtractionPanel';
 import { SidebarPanel } from '../components/SidebarPanel';
 import { TimelinePanel } from '../components/TimelinePanel';
+import { TrimControls } from '../components/TrimControls';
 import { VideoPlayer } from '../components/VideoPlayer';
 import { useVideoUpload } from '../hooks/useVideoUpload';
 import { buildEditorJobPayload } from '../model/projectPayload';
+import type { EditorJobPayload } from '../model/projectPayload';
 import { useEditorStore } from '../store/useEditorStore';
 
 interface ActiveJobContext {
@@ -19,23 +26,69 @@ interface ActiveJobContext {
   jobId: string;
 }
 
+function TranscriptionButton({
+  onClick,
+  isPending,
+  jobStatus,
+  hasResult,
+}: {
+  onClick: () => void;
+  isPending: boolean;
+  jobStatus?: string;
+  hasResult: boolean;
+}) {
+  const isRunning = isPending || jobStatus === 'queued' || jobStatus === 'processing';
+
+  if (hasResult) {
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-100 px-2.5 py-1.5 text-xs font-medium text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">
+        <FileText className="h-3.5 w-3.5" aria-hidden="true" />
+        Transcripción lista
+      </span>
+    );
+  }
+
+  return (
+    <Button size="sm" variant="secondary" onClick={onClick} loading={isRunning} disabled={isRunning}>
+      <FileText className="h-4 w-4" aria-hidden="true" />
+      {isRunning ? 'Transcribiendo...' : 'Transcripción'}
+    </Button>
+  );
+}
+
 export function EditorPage() {
   const [mediaElement, setMediaElementState] = useState<HTMLVideoElement | null>(null);
   const [activeJobContext, setActiveJobContext] = useState<ActiveJobContext | null>(null);
   const [uiMessage, setUiMessage] = useState<string | null>(null);
   const [uiError, setUiError] = useState<string | null>(null);
+  // Custom extraction — state lifted here so timeline can show overlays
+  const [customExtractionMode, setCustomExtractionMode] = useState(false);
+  const [customRanges, setCustomRanges] = useState<CustomRange[]>([
+    { id: createId('range'), start: '', end: '' },
+  ]);
+  const [isDownloadingZip, setIsDownloadingZip] = useState(false);
+  const [pendingCustomRangeHistorySync, setPendingCustomRangeHistorySync] = useState(false);
+  const [transcriptionJobId, setTranscriptionJobId] = useState<string | null>(null);
+  const [transcriptionSegments, setTranscriptionSegments] = useState<TranscriptionSegment[] | null>(null);
 
   const previousObjectUrlRef = useRef<string | null>(null);
   const lastHandledJobStatusRef = useRef<string | null>(null);
+  const lastHandledTranscriptionStatusRef = useRef<string | null>(null);
+  const hiddenAudioRef = useRef<HTMLAudioElement | null>(null);
 
   const video = useEditorStore((state) => state.video);
+  const tracks = useEditorStore((state) => state.tracks);
   const segments = useEditorStore((state) => state.segments);
   const selectedSegmentId = useEditorStore((state) => state.selectedSegmentId);
+  const selectedTrackIds = useEditorStore((state) => state.selectedTrackIds);
   const playheadTime = useEditorStore((state) => state.playheadTime);
+  const trimStart = useEditorStore((state) => state.trimStart);
+  const trimEnd = useEditorStore((state) => state.trimEnd);
   const past = useEditorStore((state) => state.past);
   const future = useEditorStore((state) => state.future);
   const uploadState = useEditorStore((state) => state.uploadState);
   const uploadMessage = useEditorStore((state) => state.uploadMessage);
+  const audioExtracted = useEditorStore((state) => state.audioExtracted);
 
   const setVideo = useEditorStore((state) => state.setVideo);
   const setVideoDuration = useEditorStore((state) => state.setVideoDuration);
@@ -46,9 +99,20 @@ export function EditorPage() {
   const selectSegment = useEditorStore((state) => state.selectSegment);
   const setSelectedSegmentDisposition = useEditorStore((state) => state.setSelectedSegmentDisposition);
   const toggleSegmentDisposition = useEditorStore((state) => state.toggleSegmentDisposition);
+  const setTrimStart = useEditorStore((state) => state.setTrimStart);
+  const setTrimEnd = useEditorStore((state) => state.setTrimEnd);
+  const setTrimStartAtPlayhead = useEditorStore((state) => state.setTrimStartAtPlayhead);
+  const setTrimEndAtPlayhead = useEditorStore((state) => state.setTrimEndAtPlayhead);
+  const clearTrimRange = useEditorStore((state) => state.clearTrimRange);
   const undo = useEditorStore((state) => state.undo);
   const redo = useEditorStore((state) => state.redo);
   const resetProject = useEditorStore((state) => state.resetProject);
+  const extractAudioLocally = useEditorStore((state) => state.extractAudioLocally);
+  const toggleTrackMute = useEditorStore((state) => state.toggleTrackMute);
+  const selectTrack = useEditorStore((state) => state.selectTrack);
+  const addCaptureToSegment = useEditorStore((state) => state.addCaptureToSegment);
+  const removeCaptureFromSegment = useEditorStore((state) => state.removeCaptureFromSegment);
+  const setSegmentsFromCustomRanges = useEditorStore((state) => state.setSegmentsFromCustomRanges);
 
   const historyPast = useMemo(() => past.map((record) => record.history), [past]);
   const historyFuture = useMemo(() => future.map((record) => record.history), [future]);
@@ -56,35 +120,158 @@ export function EditorPage() {
   const canUndo = historyPast.length > 0;
   const canRedo = historyFuture.length > 0;
 
+  const handleUndo = useCallback(() => {
+    if (customExtractionMode) {
+      setPendingCustomRangeHistorySync(true);
+    }
+    undo();
+  }, [customExtractionMode, undo]);
+
+  const handleRedo = useCallback(() => {
+    if (customExtractionMode) {
+      setPendingCustomRangeHistorySync(true);
+    }
+    redo();
+  }, [customExtractionMode, redo]);
+
   const exportMutation = useStartExportJob();
   const extractAudioMutation = useStartExtractAudioJob();
+  const transcribeMutation = useStartTranscribeJob();
   const jobStatusQuery = useProcessingJob(activeJobContext?.jobId ?? null);
+  const transcriptionJobStatusQuery = useProcessingJob(transcriptionJobId);
 
-  // Estabilizar callback de setMediaElement para evitar re-renders en VideoPlayer
   const setMediaElement = useCallback((element: HTMLVideoElement | null) => {
     setMediaElementState(element);
   }, []);
 
-  // Estabilizar callback de onTimeUpdate
   const handleTimeUpdate = useCallback((time: number) => {
     setPlayheadTime(time);
   }, [setPlayheadTime]);
 
-  // Estabilizar callback de onDurationChange
   const handleDurationChange = useCallback((duration: number) => {
     setVideoDuration(duration);
   }, [setVideoDuration]);
 
+  // Mute/unmute the video element based on the video track's muted state
+  useEffect(() => {
+    if (!mediaElement) return;
+    const videoTrack = tracks.find((t) => t.kind === 'video');
+    if (videoTrack) {
+      mediaElement.muted = videoTrack.muted;
+    }
+  }, [mediaElement, tracks]);
+
+  // Manage hidden <audio> element for extracted audio track playback
+  useEffect(() => {
+    const audioTrack = tracks.find((t) => t.kind === 'audio');
+
+    if (!audioTrack || !mediaElement) {
+      // No audio track or no video element - destroy hidden audio if it exists
+      if (hiddenAudioRef.current) {
+        hiddenAudioRef.current.pause();
+        hiddenAudioRef.current.src = '';
+        hiddenAudioRef.current = null;
+      }
+      return;
+    }
+
+    // Create or reuse hidden audio element
+    if (!hiddenAudioRef.current) {
+      const audio = new Audio();
+      audio.preload = 'auto';
+      audio.style.display = 'none';
+      document.body.appendChild(audio);
+      hiddenAudioRef.current = audio;
+    }
+
+    const audio = hiddenAudioRef.current;
+
+    // Update src if changed
+    if (audio.src !== audioTrack.sourceUrl) {
+      const wasPaused = mediaElement.paused;
+      audio.src = audioTrack.sourceUrl;
+      audio.load();
+      if (!wasPaused) {
+        void audio.play().catch(() => undefined);
+      }
+    }
+
+    // Sync muted state
+    audio.muted = audioTrack.muted;
+
+    // Sync current time to video element
+    function syncTime() {
+      if (!audio || !mediaElement) return;
+      const diff = Math.abs(audio.currentTime - mediaElement.currentTime);
+      if (diff > 0.3) {
+        audio.currentTime = mediaElement.currentTime;
+      }
+    }
+
+    function onVideoPlay() {
+      if (!audio || !mediaElement) return;
+      audio.currentTime = mediaElement.currentTime;
+      void audio.play().catch(() => undefined);
+    }
+
+    function onVideoPause() {
+      if (!audio) return;
+      audio.pause();
+    }
+
+    function onVideoSeeked() {
+      if (!audio || !mediaElement) return;
+      audio.currentTime = mediaElement.currentTime;
+    }
+
+    function onVideoTimeUpdate() {
+      syncTime();
+    }
+
+    mediaElement.addEventListener('play', onVideoPlay);
+    mediaElement.addEventListener('pause', onVideoPause);
+    mediaElement.addEventListener('seeked', onVideoSeeked);
+    mediaElement.addEventListener('timeupdate', onVideoTimeUpdate);
+
+    // Initial state sync
+    audio.muted = audioTrack.muted;
+    if (!mediaElement.paused) {
+      audio.currentTime = mediaElement.currentTime;
+      void audio.play().catch(() => undefined);
+    }
+
+    return () => {
+      mediaElement.removeEventListener('play', onVideoPlay);
+      mediaElement.removeEventListener('pause', onVideoPause);
+      mediaElement.removeEventListener('seeked', onVideoSeeked);
+      mediaElement.removeEventListener('timeupdate', onVideoTimeUpdate);
+    };
+  }, [mediaElement, tracks]);
+
+  // Sync audio track muted state to hidden audio element
+  useEffect(() => {
+    const audioTrack = tracks.find((t) => t.kind === 'audio');
+    if (hiddenAudioRef.current && audioTrack) {
+      hiddenAudioRef.current.muted = audioTrack.muted;
+    }
+  }, [tracks]);
+
+  // Cleanup hidden audio on unmount
+  useEffect(() => {
+    return () => {
+      if (hiddenAudioRef.current) {
+        hiddenAudioRef.current.pause();
+        hiddenAudioRef.current.src = '';
+        if (hiddenAudioRef.current.parentNode) {
+          hiddenAudioRef.current.parentNode.removeChild(hiddenAudioRef.current);
+        }
+        hiddenAudioRef.current = null;
+      }
+    };
+  }, []);
+
   const { uppy, isDashboardOpen, setDashboardOpen, isTusEnabled, uploadProgress, uploadError } = useVideoUpload({
     onVideoSelected: (file: File) => {
-      // Validar tamaño del archivo antes de procesar
-      const MAX_SIZE = 2 * 1024 * 1024 * 1024; // 2GB
-      if (file.size > MAX_SIZE) {
-        setUiError('El video excede el tamaño máximo permitido (2GB)');
-        return;
-      }
-
-      // Revocar URL anterior si existe
       if (previousObjectUrlRef.current) {
         URL.revokeObjectURL(previousObjectUrlRef.current);
         previousObjectUrlRef.current = null;
@@ -105,8 +292,8 @@ export function EditorPage() {
       });
 
       setUiError(null);
-      setUiMessage('Video cargado correctamente. Espera a que se genere la linea de tiempo.');
-      
+      setUiMessage('Video cargado. El timeline se esta generando automaticamente.');
+
       setTimeout(() => setDashboardOpen(false), 300);
     },
     onUploadIdReceived: setVideoUploadId,
@@ -114,11 +301,11 @@ export function EditorPage() {
   });
 
   useEffect(() => {
-    console.log('[EditorPage] mediaElement actualizado:', mediaElement ? 'Video element disponible' : 'null');
+    console.log('[EditorPage] mediaElement:', mediaElement ? 'disponible' : 'null');
     console.log('[EditorPage] Video en store:', video ? `${video.fileName} (${video.duration}s)` : 'null');
-  }, [mediaElement, video]);
+    console.log('[EditorPage] Pistas:', tracks.map((t) => `${t.kind}:${t.muted ? 'muted' : 'audio-on'}`).join(', '));
+  }, [mediaElement, video, tracks]);
 
-  // Cleanup de object URL al desmontar
   useEffect(() => {
     return () => {
       if (previousObjectUrlRef.current) {
@@ -128,7 +315,6 @@ export function EditorPage() {
     };
   }, []);
 
-  // Keyboard shortcuts para undo/redo
   useEffect(() => {
     function handleKeyboardShortcuts(event: KeyboardEvent): void {
       const isMetaOrControl = event.metaKey || event.ctrlKey;
@@ -138,9 +324,9 @@ export function EditorPage() {
 
       event.preventDefault();
       if (event.shiftKey) {
-        redo();
+        handleRedo();
       } else {
-        undo();
+        handleUndo();
       }
     }
 
@@ -149,9 +335,72 @@ export function EditorPage() {
     return () => {
       window.removeEventListener('keydown', handleKeyboardShortcuts);
     };
-  }, [redo, undo]);
+  }, [handleRedo, handleUndo]);
 
-  // Job status polling
+  useEffect(() => {
+    if (!pendingCustomRangeHistorySync) {
+      return;
+    }
+
+    setPendingCustomRangeHistorySync(false);
+
+    if (!customExtractionMode) {
+      return;
+    }
+
+    const duration = video?.duration ?? 0;
+    if (duration <= 0) {
+      setCustomRanges([{ id: createId('range'), start: '', end: '' }]);
+      return;
+    }
+
+    const sortedSegments = [...segments].sort((a, b) => a.start - b.start);
+    if (sortedSegments.length === 0) {
+      setCustomRanges([{ id: createId('range'), start: '', end: '' }]);
+      return;
+    }
+
+    const EPSILON = 0.02;
+    let cursor = 0;
+    let coversWholeTimeline = Math.abs(sortedSegments[0].start) <= EPSILON;
+
+    for (const segment of sortedSegments) {
+      if (!coversWholeTimeline) {
+        break;
+      }
+
+      if (segment.start - cursor > EPSILON) {
+        coversWholeTimeline = false;
+        break;
+      }
+
+      cursor = Math.max(cursor, segment.end);
+    }
+
+    if (duration - cursor > EPSILON) {
+      coversWholeTimeline = false;
+    }
+
+    if (coversWholeTimeline) {
+      setCustomRanges([{ id: createId('range'), start: '', end: '' }]);
+      return;
+    }
+
+    const rebuiltRanges = sortedSegments
+      .filter((segment) => segment.end - segment.start > 0.01)
+      .map((segment) => ({
+        id: createId('range'),
+        start: Number(segment.start.toFixed(3)).toString(),
+        end: Number(segment.end.toFixed(3)).toString(),
+      }));
+
+    setCustomRanges(
+      rebuiltRanges.length > 0
+        ? rebuiltRanges
+        : [{ id: createId('range'), start: '', end: '' }],
+    );
+  }, [customExtractionMode, pendingCustomRangeHistorySync, segments, video?.duration]);
+
   useEffect(() => {
     const jobStatus = jobStatusQuery.data;
     if (!jobStatus) {
@@ -175,11 +424,159 @@ export function EditorPage() {
     }
   }, [jobStatusQuery.data]);
 
+  useEffect(() => {
+    const jobStatus = transcriptionJobStatusQuery.data;
+    if (!jobStatus) return;
+
+    const statusKey = `${jobStatus.jobId}:${jobStatus.status}`;
+    if (lastHandledTranscriptionStatusRef.current === statusKey) return;
+    lastHandledTranscriptionStatusRef.current = statusKey;
+
+    if (jobStatus.status === 'completed') {
+      setTranscriptionSegments(jobStatus.transcriptionSegments ?? null);
+      setUiMessage('Transcripción completada. Se incluirá automáticamente en el próximo ZIP que descargues.');
+      setUiError(null);
+    }
+
+    if (jobStatus.status === 'failed') {
+      setUiError(jobStatus.error ?? 'Error en la transcripción con Whisper.');
+    }
+  }, [transcriptionJobStatusQuery.data]);
+
   const activeJobData = useMemo(() => jobStatusQuery.data ?? null, [jobStatusQuery.data]);
+
+  // ── Custom ranges CRUD ────────────────────────────────────────────
+
+  /** Parsed ranges usable by the timeline overlay (only valid ones). */
+  const validCustomRanges = useMemo(() => {
+    if (!customExtractionMode) return [];
+    return customRanges
+      .map((r) => ({ id: r.id, start: parseFloat(r.start), end: parseFloat(r.end) }))
+      .filter((r) => !isNaN(r.start) && !isNaN(r.end) && r.end > r.start && r.start >= 0)
+      .sort((a, b) => a.start - b.start);
+  }, [customExtractionMode, customRanges]);
+
+  const parseValidCustomRanges = useCallback((ranges: CustomRange[]): Array<{ start: number; end: number }> => {
+    const duration = video?.duration ?? 0;
+    if (duration <= 0) return [];
+
+    const parsed = ranges
+      .map((r) => ({ start: parseFloat(r.start), end: parseFloat(r.end) }))
+      .filter((r) => !isNaN(r.start) && !isNaN(r.end) && r.start >= 0 && r.end > r.start && r.end <= duration)
+      .sort((a, b) => a.start - b.start);
+
+    const nonOverlapping: Array<{ start: number; end: number }> = [];
+    for (const range of parsed) {
+      const previous = nonOverlapping[nonOverlapping.length - 1];
+      if (previous && range.start < previous.end - 0.001) {
+        continue;
+      }
+      nonOverlapping.push({
+        start: Number(range.start.toFixed(3)),
+        end: Number(range.end.toFixed(3)),
+      });
+    }
+
+    return nonOverlapping;
+  }, [video?.duration]);
+
+  const handleAddCustomRange = useCallback(() => {
+    setCustomRanges((prev) => [...prev, { id: createId('range'), start: '', end: '' }]);
+  }, []);
+
+  const handleUpdateCustomRange = useCallback(
+    (id: string, field: 'start' | 'end', value: string) => {
+      const nextRanges = customRanges.map((r) => (r.id === id ? { ...r, [field]: value } : r));
+      setCustomRanges(nextRanges);
+      setSegmentsFromCustomRanges(parseValidCustomRanges(nextRanges));
+    },
+    [customRanges, parseValidCustomRanges, setSegmentsFromCustomRanges],
+  );
+
+  const handleRemoveCustomRange = useCallback((id: string) => {
+    if (customRanges.length === 1) return;
+
+    const nextRanges = customRanges.filter((r) => r.id !== id);
+    setCustomRanges(nextRanges);
+    setSegmentsFromCustomRanges(parseValidCustomRanges(nextRanges));
+  }, [customRanges, parseValidCustomRanges, setSegmentsFromCustomRanges]);
+
+  /** Called by TimelinePanel when the user finishes a right-click drag. */
+  const handleCustomRangeCreate = useCallback(
+    (range: { start: number; end: number }) => {
+      const newRange = {
+        start: Number(range.start.toFixed(3)),
+        end: Number(range.end.toFixed(3)),
+      };
+
+      const existing = parseValidCustomRanges(customRanges);
+
+      const duplicated = existing.some(
+        (r) => Math.abs(r.start - newRange.start) < 0.01 && Math.abs(r.end - newRange.end) < 0.01,
+      );
+      if (duplicated) {
+        setUiError('Ese rango ya existe en la lista de segmentos personalizados.');
+        return;
+      }
+
+      const overlaps = existing.some(
+        (r) => newRange.start < r.end - 0.001 && newRange.end > r.start + 0.001,
+      );
+      if (overlaps) {
+        setUiError('El rango se superpone con otro segmento. Ajusta el corte para que no se traslapen.');
+        return;
+      }
+
+      const nextRanges = [
+        ...customRanges.filter((r) => r.start.trim() !== '' || r.end.trim() !== ''),
+        {
+          id: createId('range'),
+          start: String(newRange.start),
+          end: String(newRange.end),
+        },
+      ].sort((a, b) => {
+        const aStart = parseFloat(a.start);
+        const bStart = parseFloat(b.start);
+        if (isNaN(aStart) && isNaN(bStart)) return 0;
+        if (isNaN(aStart)) return 1;
+        if (isNaN(bStart)) return -1;
+        return aStart - bStart;
+      });
+
+      setUiError(null);
+      setCustomRanges(nextRanges);
+      setSegmentsFromCustomRanges(parseValidCustomRanges(nextRanges), newRange);
+    },
+    [customRanges, parseValidCustomRanges, setSegmentsFromCustomRanges],
+  );
+
+  function handleCapture(): void {
+    if (!mediaElement || !selectedSegmentId) return;
+
+    const canvas = document.createElement('canvas');
+    canvas.width = mediaElement.videoWidth || 640;
+    canvas.height = mediaElement.videoHeight || 360;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    ctx.drawImage(mediaElement, 0, 0, canvas.width, canvas.height);
+    const dataUrl = canvas.toDataURL('image/png');
+    addCaptureToSegment(selectedSegmentId, dataUrl, playheadTime);
+  }
 
   function buildPayloadOrFail() {
     if (!video) {
       setUiError('Carga un video para lanzar operaciones de backend.');
+      return null;
+    }
+
+    if (isTusEnabled && !video.uploadId) {
+      if (uploadState === 'uploading') {
+        setUiError('La subida aun esta en progreso. Espera a que llegue al 100% antes de exportar.');
+      } else {
+        setUiError('No se obtuvo uploadId del archivo. Vuelve a subir el video para continuar.');
+      }
+
       return null;
     }
 
@@ -188,7 +585,7 @@ export function EditorPage() {
       return null;
     }
 
-    return buildEditorJobPayload(video, segments);
+    return buildEditorJobPayload(video, segments, trimStart, trimEnd);
   }
 
   function runExportJob(): void {
@@ -211,24 +608,305 @@ export function EditorPage() {
     });
   }
 
-  function runExtractAudioJob(): void {
-    const payload = buildPayloadOrFail();
-    if (!payload) {
+  /**
+   * "Extract Audio" has two modes:
+   * 1. LOCAL (no backend required): Always runs first. Creates a visual audio track in the
+   *    timeline from the same source file. Video track gets muted. No backend call needed.
+   * 2. BACKEND: If a backend API is configured, also sends to backend for server-side extraction.
+   *
+   * This ensures the feature always works even without a backend.
+   */
+  function runExtractAudio(): void {
+    if (!video) {
+      setUiError('Carga un video primero para extraer su audio.');
       return;
     }
 
+    if (video.duration <= 0) {
+      setUiError('Esperando metadata del video. Intenta nuevamente en unos segundos.');
+      return;
+    }
+
+    if (audioExtracted) {
+      setUiError('El audio ya fue extraido. Resetea el proyecto para volver al estado original.');
+      return;
+    }
+
+    // Check that the video likely has audio (heuristic: assume it does unless it's muted-only format)
+    // We cannot truly check without decoding, so we proceed optimistically.
+    const success = extractAudioLocally();
+    if (success) {
+      setUiError(null);
+      setUiMessage('Audio extraido localmente. El timeline ahora muestra la pista de video (miniaturas) y la pista de audio (forma de onda) por separado. El video esta silenciado y el audio suena desde la pista de audio.');
+
+      // If backend is configured AND we have a valid uploadId, also send to backend.
+      // We build the payload manually here (without calling buildPayloadOrFail which shows errors)
+      // so that a missing uploadId never interrupts a successful local extraction.
+      const canCallBackend =
+        Boolean(import.meta.env.VITE_API_BASE_URL) &&
+        Boolean(video.uploadId) &&
+        video.duration > 0;
+
+      if (canCallBackend) {
+        try {
+          const payload = buildEditorJobPayload(video, segments, trimStart, trimEnd);
+          extractAudioMutation.mutate(payload, {
+            onSuccess: (response) => {
+              setActiveJobContext({ action: 'extract-audio', jobId: response.jobId });
+              setTranscriptionJobId(null);
+              setTranscriptionSegments(null);
+              setUiMessage('Audio extraido localmente + tarea backend iniciada. Seguimiento activo por polling.');
+            },
+            onError: () => {
+              // Backend failed but local extraction succeeded - don't show error
+              setUiMessage('Audio extraido localmente. Backend no disponible para procesamiento servidor.');
+            },
+          });
+        } catch {
+          // Ignore payload build errors - local extraction already succeeded
+        }
+      }
+    } else {
+      setUiError('No se pudo extraer el audio. Asegurate de tener un video cargado.');
+    }
+  }
+
+  /**
+   * Recibe rangos ya validados desde el inline panel y los envía al backend.
+   * El panel valida antes de llamar aquí, así que los rangos son siempre correctos.
+   */
+  function runCustomExtractionJob(ranges: Array<{ start: number; end: number }>): void {
+
+    if (!video) {
+      setUiError('Carga un video primero.');
+      return;
+    }
+
+    if (video.duration <= 0) {
+      setUiError('Esperando metadata del video. Intenta nuevamente en unos segundos.');
+      return;
+    }
+
+    if (!import.meta.env.VITE_API_BASE_URL) {
+      setUiError('La extraccion personalizada requiere que VITE_API_BASE_URL este configurado en el entorno.');
+      return;
+    }
+
+    if (!video.uploadId) {
+      setUiError('La extraccion personalizada requiere que el video este subido al servidor (Tus). Configura VITE_TUS_ENDPOINT y vuelve a cargar el video.');
+      return;
+    }
+
+    const customTimeline = ranges.map((range, i) => ({
+      id: `custom-${i}`,
+      start: Number(range.start.toFixed(3)),
+      end: Number(range.end.toFixed(3)),
+      disposition: 'keep' as const,
+    }));
+
+    const payload: EditorJobPayload = {
+      source: {
+        fileName: video.fileName,
+        mimeType: video.mimeType,
+        size: video.size,
+        uploadId: video.uploadId,
+      },
+      timeline: customTimeline,
+      trimRange: { start: null, end: null },
+      meta: {
+        duration: Number(video.duration.toFixed(3)),
+        keepSegmentCount: customTimeline.length,
+        removeSegmentCount: 0,
+        hasTrimRange: false,
+        trimDuration: null,
+      },
+    };
+
     setUiError(null);
-    setUiMessage('Solicitando extraccion de audio al backend...');
+    setUiMessage(`Enviando extraccion personalizada: ${ranges.length} rango(s) al backend...`);
 
     extractAudioMutation.mutate(payload, {
       onSuccess: (response) => {
         setActiveJobContext({ action: 'extract-audio', jobId: response.jobId });
-        setUiMessage('Extraccion de audio enviada. Seguimiento activo por polling.');
+        setTranscriptionJobId(null);
+        setTranscriptionSegments(null);
+        setUiMessage(
+          `Extraccion personalizada enviada (${ranges.length} segmento(s)). Seguimiento activo por polling.`
+        );
       },
       onError: (error) => {
         setUiError(error.message);
       },
     });
+  }
+
+  function formatTimestamp(seconds: number): string {
+    const m = Math.floor(seconds / 60);
+    const s = Math.floor(seconds % 60);
+    return m > 0 ? `${m}:${String(s).padStart(2, '0')}` : `0:${String(s).padStart(2, '0')}`;
+  }
+
+  function runTranscriptionJob(): void {
+    const resultUrls =
+      activeJobData?.resultUrls ?? (activeJobData?.resultUrl ? [activeJobData.resultUrl] : []);
+
+    if (resultUrls.length === 0) {
+      setUiError('No hay segmentos de audio disponibles para transcribir.');
+      return;
+    }
+
+    const keepSegments = [...segments]
+      .filter((s) => s.disposition === 'keep')
+      .sort((a, b) => a.start - b.start);
+
+    const segmentsToTranscribe = resultUrls
+      .map((url, i) => ({
+        filename: url.split('/').pop() ?? '',
+        start: keepSegments[i]?.start ?? 0,
+        end: keepSegments[i]?.end ?? 0,
+      }))
+      .filter((s) => s.filename.length > 0);
+
+    if (segmentsToTranscribe.length === 0) {
+      setUiError('No se pudieron identificar los archivos de audio para transcribir.');
+      return;
+    }
+
+    setUiError(null);
+    setTranscriptionSegments(null);
+    lastHandledTranscriptionStatusRef.current = null;
+
+    transcribeMutation.mutate(
+      { segments: segmentsToTranscribe },
+      {
+        onSuccess: (response) => {
+          setTranscriptionJobId(response.jobId);
+          setUiMessage(`Transcripción iniciada (${segmentsToTranscribe.length} segmento(s)). Procesando con Whisper...`);
+        },
+        onError: (error) => {
+          setUiError(error.message);
+        },
+      },
+    );
+  }
+
+  /**
+   * Descarga todos los archivos del job actual empaquetados en un ZIP.
+   * Organiza por carpetas: una por segmento (keep), con audio + capturas asociadas.
+   * Si no hay audio del backend pero hay capturas, genera un ZIP solo con capturas.
+   */
+  async function handleDownloadZip(): Promise<void> {
+    const resultUrls =
+      activeJobData?.resultUrls ?? (activeJobData?.resultUrl ? [activeJobData.resultUrl] : []);
+
+    const keepSegments = [...segments]
+      .filter((s) => s.disposition === 'keep')
+      .sort((a, b) => a.start - b.start);
+
+    // Determine if we should use the segment-organized endpoint
+    const hasAudio = resultUrls.length > 0;
+    const hasAnyCaptures = keepSegments.some((s) => s.captures.length > 0);
+
+    if (!hasAudio && !hasAnyCaptures) {
+      setUiError('No hay archivos ni capturas disponibles para descargar.');
+      return;
+    }
+
+    const segmentEntries: SegmentZipEntry[] = keepSegments.length > 0
+      ? keepSegments.map((seg, i) => {
+          const audioUrl = resultUrls[i] ?? null;
+          const audioFilename = audioUrl ? (audioUrl.split('/').pop() ?? undefined) : undefined;
+          const folderName = `segmento${i + 1}`;
+
+          const startToken = String(Math.floor(seg.start)).padStart(2, '0');
+          const endToken = String(Math.floor(seg.end)).padStart(2, '0');
+          const captures = seg.captures.map((c, ci) => ({
+            name: `ss_${startToken}_${endToken}_${String(ci + 1).padStart(2, '0')}.png`,
+            data: c.dataUrl,
+          }));
+
+          return {
+            folderName,
+            audioFilename,
+            audioUrl: audioUrl ?? undefined,
+            segmentStart: seg.start,
+            segmentEnd: seg.end,
+            captures,
+          };
+        })
+      : resultUrls.map((url, i) => {
+          const audioFilename = url.split('/').pop() ?? undefined;
+          return {
+            folderName: `segmento${i + 1}`,
+            audioFilename,
+            audioUrl: url,
+            captures: [],
+          };
+        });
+
+    // Construir texto de transcripción si está disponible
+    let transcriptionText: string | undefined;
+    if (transcriptionSegments && transcriptionSegments.length > 0) {
+      transcriptionText = transcriptionSegments
+        .map((seg, i) => {
+          const startLabel = formatTimestamp(seg.start);
+          const endLabel = formatTimestamp(seg.end);
+          return `=== Segmento ${i + 1} (${startLabel} - ${endLabel}) ===\n${seg.text}`;
+        })
+        .join('\n\n');
+    }
+
+    setIsDownloadingZip(true);
+    setUiError(null);
+
+    try {
+
+      const blob = await downloadSegmentsZip(segmentEntries, transcriptionText);
+      const blobUrl = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = blobUrl;
+      anchor.download = 'segmentos.zip';
+      document.body.appendChild(anchor);
+      anchor.click();
+      document.body.removeChild(anchor);
+      URL.revokeObjectURL(blobUrl);
+    } catch {
+      // Fallback local ZIP for captures-only or mixed audio+captures scenarios.
+      try {
+        const blob = await buildSegmentsZipLocally(segmentEntries, transcriptionText);
+        const blobUrl = URL.createObjectURL(blob);
+        const anchor = document.createElement('a');
+        anchor.href = blobUrl;
+        anchor.download = 'segmentos.zip';
+        document.body.appendChild(anchor);
+        anchor.click();
+        document.body.removeChild(anchor);
+        URL.revokeObjectURL(blobUrl);
+      } catch {
+        // Last fallback: audio-only server ZIP if local ZIP generation fails.
+        if (resultUrls.length === 0) {
+          setUiError('No se pudo generar el ZIP local de capturas. Intenta nuevamente.');
+          return;
+        }
+
+        const filenames = resultUrls.map((url) => url.split('/').pop() ?? '').filter(Boolean);
+        try {
+          const blob = await downloadZipFile(filenames);
+          const blobUrl = URL.createObjectURL(blob);
+          const anchor = document.createElement('a');
+          anchor.href = blobUrl;
+          anchor.download = 'segmentos.zip';
+          document.body.appendChild(anchor);
+          anchor.click();
+          document.body.removeChild(anchor);
+          URL.revokeObjectURL(blobUrl);
+        } catch (fallbackErr) {
+          setUiError(fallbackErr instanceof Error ? fallbackErr.message : 'Error al descargar ZIP');
+        }
+      }
+    } finally {
+      setIsDownloadingZip(false);
+    }
   }
 
   return (
@@ -244,10 +922,8 @@ export function EditorPage() {
           isTusEnabled={isTusEnabled}
           activeJob={activeJobData}
           exporting={exportMutation.isPending}
-          extractingAudio={extractAudioMutation.isPending}
           onOpenUploader={() => setDashboardOpen(true)}
           onExport={runExportJob}
-          onExtractAudio={runExtractAudioJob}
           onResetProject={resetProject}
         />
 
@@ -265,7 +941,6 @@ export function EditorPage() {
                 </button>
               </div>
 
-              {/* Instrucciones visuales mejoradas */}
               <div className="border-b border-slate-200 bg-gradient-to-br from-brand-50/50 to-cyan-50/30 p-6 dark:border-slate-700 dark:from-brand-950/20 dark:to-cyan-950/10">
                 <div className="flex items-start gap-4">
                   <div className="rounded-xl bg-brand-100 p-3 dark:bg-brand-900/40">
@@ -273,15 +948,15 @@ export function EditorPage() {
                   </div>
                   <div className="flex-1">
                     <h3 className="font-display text-lg font-semibold text-slate-900 dark:text-slate-100">
-                      Arrastra tu video aquí o haz click abajo
+                      Arrastra tu video aqui o haz click abajo
                     </h3>
                     <p className="mt-1 flex items-center gap-1.5 text-sm text-slate-600 dark:text-slate-400">
                       <MousePointerClick className="h-4 w-4" aria-hidden="true" />
-                      <span>Haz <strong>click en el área gris de abajo</strong> o arrastra un archivo</span>
+                      <span>Haz <strong>click en el area gris de abajo</strong> o arrastra un archivo</span>
                     </p>
                     <div className="mt-3 flex flex-wrap gap-2">
                       <span className="rounded-lg bg-white px-2.5 py-1 text-xs font-medium text-slate-700 ring-1 ring-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:ring-slate-700">
-                        Máximo 2 GB
+                        Maximo 2 GB
                       </span>
                       <span className="rounded-lg bg-white px-2.5 py-1 text-xs font-medium text-slate-700 ring-1 ring-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:ring-slate-700">
                         MP4, WebM, MOV
@@ -292,7 +967,6 @@ export function EditorPage() {
                 </div>
               </div>
 
-              {/* Dashboard de Uppy - Configuración correcta */}
               <div className="p-5">
                 <Dashboard
                   uppy={uppy}
@@ -300,13 +974,13 @@ export function EditorPage() {
                   hideProgressDetails={false}
                   hideUploadButton={!isTusEnabled}
                   height={350}
-                  note="💡 Haz click en esta área o arrastra tu video aquí"
+                  note="Haz click en esta area o arrastra tu video aqui"
                   locale={{
                     strings: {
-                      dropPasteBoth: 'Suelta tu video aquí o %{browseFiles}',
-                      dropPasteFiles: 'Suelta tu video aquí o %{browseFiles}',
+                      dropPasteBoth: 'Suelta tu video aqui o %{browseFiles}',
+                      dropPasteFiles: 'Suelta tu video aqui o %{browseFiles}',
                       browseFiles: 'haz click para seleccionar',
-                      dropHint: 'Arrastra tu video aquí',
+                      dropHint: 'Arrastra tu video aqui',
                     },
                   }}
                 />
@@ -333,17 +1007,103 @@ export function EditorPage() {
           </div>
         ) : null}
 
-        {activeJobData?.status === 'completed' && activeJobData.resultUrl ? (
+        {/* Captures-only ZIP: visible when there are captures but no completed backend job */}
+        {segments.some((s) => s.captures.length > 0) && activeJobData?.status !== 'completed' ? (
+          <div className="mt-4 rounded-2xl border border-violet-200 bg-violet-50 px-4 py-3 text-sm text-violet-700 dark:border-violet-900/50 dark:bg-violet-950/40 dark:text-violet-400">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <p className="font-medium">
+                Capturas disponibles: {segments.reduce((sum, s) => sum + s.captures.length, 0)} en total
+              </p>
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => void handleDownloadZip()}
+                loading={isDownloadingZip}
+                disabled={isDownloadingZip}
+              >
+                <Archive className="h-4 w-4" aria-hidden="true" />
+                Descargar capturas ZIP
+              </Button>
+            </div>
+          </div>
+        ) : null}
+
+        {activeJobData?.status === 'completed' && (activeJobData.resultUrls ?? (activeJobData.resultUrl ? [activeJobData.resultUrl] : [])).length > 0 ? (
           <div className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-950/40 dark:text-emerald-400">
-            <a
-              className="inline-flex items-center gap-2 font-semibold underline decoration-emerald-400 underline-offset-2 dark:decoration-emerald-600"
-              href={activeJobData.resultUrl}
-              target="_blank"
-              rel="noreferrer"
-            >
-              <Download className="h-4 w-4" aria-hidden="true" />
-              Abrir resultado procesado
-            </a>
+            {(activeJobData.resultUrls ?? [activeJobData.resultUrl!]).length === 1 ? (
+              <div className="flex flex-wrap items-center gap-3">
+                <a
+                  className="inline-flex items-center gap-2 font-semibold underline decoration-emerald-400 underline-offset-2 dark:decoration-emerald-600"
+                  href={(activeJobData.resultUrls ?? [activeJobData.resultUrl!])[0]}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  <Download className="h-4 w-4" aria-hidden="true" />
+                  Abrir resultado procesado
+                </a>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => void handleDownloadZip()}
+                  loading={isDownloadingZip}
+                  disabled={isDownloadingZip}
+                >
+                  <Archive className="h-4 w-4" aria-hidden="true" />
+                  {transcriptionSegments ? 'Descargar ZIP + Transcripción' : 'Descargar ZIP'}
+                </Button>
+                <TranscriptionButton
+                  onClick={runTranscriptionJob}
+                  isPending={transcribeMutation.isPending}
+                  jobStatus={transcriptionJobStatusQuery.data?.status}
+                  hasResult={Boolean(transcriptionSegments)}
+                />
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <p className="font-semibold">
+                    {(activeJobData.resultUrls ?? []).length} segmentos de audio listos para descargar:
+                  </p>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <TranscriptionButton
+                      onClick={runTranscriptionJob}
+                      isPending={transcribeMutation.isPending}
+                      jobStatus={transcriptionJobStatusQuery.data?.status}
+                      hasResult={Boolean(transcriptionSegments)}
+                    />
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => void handleDownloadZip()}
+                      loading={isDownloadingZip}
+                      disabled={isDownloadingZip}
+                    >
+                      <Archive className="h-4 w-4" aria-hidden="true" />
+                      {transcriptionSegments ? 'Descargar ZIP + Transcripción' : 'Descargar ZIP'}
+                    </Button>
+                  </div>
+                </div>
+                <ul className="space-y-1">
+                  {(activeJobData.resultUrls ?? []).map((url, idx) => {
+                    const filename = url.split('/').pop() ?? `segmento_${idx + 1}`;
+                    return (
+                      <li key={url}>
+                        <a
+                          className="inline-flex items-center gap-2 underline decoration-emerald-400 underline-offset-2 dark:decoration-emerald-600"
+                          href={url}
+                          target="_blank"
+                          rel="noreferrer"
+                          download={filename}
+                        >
+                          <Download className="h-3.5 w-3.5" aria-hidden="true" />
+                          {filename}
+                        </a>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            )}
           </div>
         ) : null}
 
@@ -359,35 +1119,85 @@ export function EditorPage() {
 
             <TimelinePanel
               mediaElement={mediaElement}
+              tracks={tracks}
               segments={segments}
               selectedSegmentId={selectedSegmentId}
+              selectedTrackIds={selectedTrackIds}
               duration={video?.duration ?? 0}
               playheadTime={playheadTime}
+              trimStart={trimStart}
+              trimEnd={trimEnd}
               onSeek={setPlayheadTime}
               onCutAtPlayhead={addCutAtPlayhead}
               onSelectSegment={selectSegment}
+              onSetTrimStart={setTrimStart}
+              onSetTrimEnd={setTrimEnd}
+              onToggleTrackMute={toggleTrackMute}
+              onSelectTrack={selectTrack}
+              customExtractionActive={customExtractionMode}
+              validCustomRanges={validCustomRanges}
+              onCustomRangeCreate={handleCustomRangeCreate}
+              extractingAudio={extractAudioMutation.isPending}
+              audioExtracted={audioExtracted}
+              onExtractAudio={runExtractAudio}
+              onCustomExtraction={() => {
+                setCustomExtractionMode((prev) => {
+                  if (!prev) {
+                    setCustomRanges([{ id: createId('range'), start: '', end: '' }]);
+                  }
+                  return !prev;
+                });
+              }}
+              onCapture={handleCapture}
             />
+
+            {/* Inline custom extraction panel — aparece debajo del timeline */}
+            {customExtractionMode ? (
+              <CustomExtractionPanel
+                videoDuration={video?.duration ?? 0}
+                ranges={customRanges}
+                disabled={extractAudioMutation.isPending}
+                onAddRange={handleAddCustomRange}
+                onUpdateRange={handleUpdateCustomRange}
+                onRemoveRange={handleRemoveCustomRange}
+                onExtract={runCustomExtractionJob}
+                onClose={() => setCustomExtractionMode(false)}
+              />
+            ) : null}
           </div>
 
-          <SidebarPanel
-            segments={segments}
-            selectedSegmentId={selectedSegmentId}
-            onSelectSegment={selectSegment}
-            onSeek={setPlayheadTime}
-            onSetSelectedDisposition={setSelectedSegmentDisposition}
-            onToggleSegmentDisposition={toggleSegmentDisposition}
-            onUndo={undo}
-            onRedo={redo}
-            canUndo={canUndo}
-            canRedo={canRedo}
-            historyPast={historyPast}
-            historyFuture={historyFuture}
-          />
+          <div className="space-y-5">
+            <SidebarPanel
+              segments={segments}
+              selectedSegmentId={selectedSegmentId}
+              onSelectSegment={selectSegment}
+              onSeek={setPlayheadTime}
+              onSetSelectedDisposition={setSelectedSegmentDisposition}
+              onToggleSegmentDisposition={toggleSegmentDisposition}
+              onRemoveCaptureFromSegment={removeCaptureFromSegment}
+              onUndo={handleUndo}
+              onRedo={handleRedo}
+              canUndo={canUndo}
+              canRedo={canRedo}
+              historyPast={historyPast}
+              historyFuture={historyFuture}
+            />
+
+            <TrimControls
+              trimStart={trimStart}
+              trimEnd={trimEnd}
+              playheadTime={playheadTime}
+              duration={video?.duration ?? 0}
+              onSetTrimStart={setTrimStartAtPlayhead}
+              onSetTrimEnd={setTrimEndAtPlayhead}
+              onClearTrimRange={clearTrimRange}
+            />
+          </div>
         </main>
 
         <footer className="mt-6 rounded-2xl border border-white/60 bg-white/70 p-4 text-xs text-slate-500 dark:border-slate-700/50 dark:bg-slate-800/70 dark:text-slate-400">
           <p>
-            Editor de video no destructivo: visualiza cortes, gestiona segmentos y prepara operaciones para procesamiento futuro.
+            Editor de video no destructivo: visualiza cortes, gestiona segmentos y prepara operaciones para procesamiento.
           </p>
           <p className="mt-1">
             Job activo: {activeJobContext ? `${activeJobContext.action} (${activeJobContext.jobId})` : 'ninguno'}
@@ -395,6 +1205,9 @@ export function EditorPage() {
             Estado query: {jobStatusQuery.isFetching ? 'consultando' : 'estable'}
             {' · '}
             Media: {mediaElement ? 'conectado' : 'desconectado'}
+            {' · '}
+            Pistas: {tracks.length}
+            {audioExtracted ? ' · Audio extraido' : ''}
           </p>
           {!isTusEnabled ? <StatusBadge className="mt-2">Tus pendiente de configurar en entorno</StatusBadge> : null}
         </footer>

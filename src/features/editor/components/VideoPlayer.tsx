@@ -1,8 +1,8 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 
 import { FileVideo, Play } from 'lucide-react';
-import Plyr from 'plyr';
 
+import { SYNC_THRESHOLD } from '../../../shared/lib/constants';
 import { formatTime } from '../../../shared/lib/formatTime';
 import type { VideoAsset } from '../model/types';
 
@@ -22,58 +22,10 @@ export function VideoPlayer({
   onDurationChange,
 }: VideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
-  const playerRef = useRef<Plyr | null>(null);
-  const [isPlayerReady, setIsPlayerReady] = useState(false);
   const currentVideoUrlRef = useRef<string | null>(null);
   const metadataIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // 1. Inicializar Plyr solo una vez al montar el componente
-  useEffect(() => {
-    const mediaElement = videoRef.current;
-    if (!mediaElement || playerRef.current) {
-      return;
-    }
-
-    console.log('[VideoPlayer] Inicializando Plyr player');
-
-    const player = new Plyr(mediaElement, {
-      controls: ['play-large', 'play', 'progress', 'current-time', 'duration', 'mute', 'volume', 'settings', 'fullscreen'],
-      settings: ['speed'],
-      speed: {
-        selected: 1,
-        options: [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2],
-      },
-    });
-
-    playerRef.current = player;
-    setIsPlayerReady(true);
-    console.log('[VideoPlayer] Plyr inicializado correctamente');
-
-    return () => {
-      console.log('[VideoPlayer] Destruyendo Plyr');
-      player.destroy();
-      playerRef.current = null;
-      setIsPlayerReady(false);
-    };
-  }, []); // Solo se ejecuta una vez al montar
-
-  // 2. Pasar mediaElement al padre cuando el player esté listo
-  useEffect(() => {
-    const mediaElement = videoRef.current;
-    if (!mediaElement || !isPlayerReady) {
-      return;
-    }
-
-    console.log('[VideoPlayer] MediaElement listo, pasando a TimelinePanel');
-    onMediaReady(mediaElement);
-
-    return () => {
-      console.log('[VideoPlayer] Limpiando mediaElement del padre');
-      onMediaReady(null);
-    };
-  }, [isPlayerReady, onMediaReady]);
-
-  // 3. Event listeners del video - configurar una sola vez
+  // 1. Event listeners del video - configurar una sola vez
   useEffect(() => {
     const mediaElement = videoRef.current;
     if (!mediaElement) {
@@ -147,9 +99,9 @@ export function VideoPlayer({
       mediaElement.removeEventListener('canplay', handleCanPlay);
       mediaElement.removeEventListener('error', handleError);
     };
-  }, []); // Listeners estables, sin dependencias de callbacks
+  }, [onTimeUpdate, onDurationChange]);
 
-  // 4. Cargar el video cuando cambia - ESTE ES EL EFECTO CRÍTICO
+  // 2. Cargar el video cuando cambia - ESTE ES EL EFECTO CRÍTICO
   useEffect(() => {
     const mediaElement = videoRef.current;
     if (!mediaElement) {
@@ -165,6 +117,7 @@ export function VideoPlayer({
     // Si no hay video, limpiar
     if (!video) {
       console.log('[VideoPlayer] Limpiando video anterior');
+      mediaElement.pause();
       mediaElement.removeAttribute('src');
       mediaElement.load();
       currentVideoUrlRef.current = null;
@@ -243,21 +196,37 @@ export function VideoPlayer({
     };
   }, [video]); // Solo depende de video, no de callbacks
 
-  // 5. Sincronizar tiempo cuando se solicita seek externo
+  // 3. Exponer mediaElement al timeline solo cuando hay video activo
+  useEffect(() => {
+    const mediaElement = videoRef.current;
+
+    if (!mediaElement || !video?.localUrl) {
+      onMediaReady(null);
+      return;
+    }
+
+    onMediaReady(mediaElement);
+
+    return () => {
+      onMediaReady(null);
+    };
+  }, [video?.localUrl, onMediaReady]);
+
+  // 4. Sincronizar tiempo cuando se solicita seek externo
   useEffect(() => {
     const mediaElement = videoRef.current;
     if (!mediaElement || !video || !Number.isFinite(requestedTime)) {
       return;
     }
 
-    // Solo actualizar si la diferencia es significativa (> 0.18s)
+    // Solo actualizar si la diferencia es significativa
     const currentTime = mediaElement.currentTime;
-    if (Math.abs(currentTime - requestedTime) > 0.18) {
+    if (Math.abs(currentTime - requestedTime) > SYNC_THRESHOLD) {
       mediaElement.currentTime = requestedTime;
     }
   }, [requestedTime, video]);
 
-  // 6. Cleanup general al desmontar
+  // 5. Cleanup general al desmontar
   useEffect(() => {
     return () => {
       if (metadataIntervalRef.current) {
@@ -270,8 +239,19 @@ export function VideoPlayer({
   return (
     <section className="group rounded-3xl border border-white/40 bg-gradient-to-br from-slate-900 via-slate-950 to-slate-900 p-5 shadow-[0_24px_55px_-30px_rgba(2,6,23,0.9)] transition-all hover:shadow-[0_24px_65px_-25px_rgba(2,6,23,0.95)] dark:border-slate-800/60 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950">
       <div className="relative aspect-video overflow-hidden rounded-2xl bg-slate-950 ring-1 ring-white/5">
-        {!video ? (
-          <div className="flex h-full w-full flex-col items-center justify-center gap-4 text-slate-400">
+        {/* El <video> siempre está en el DOM para que Plyr se inicialice una sola vez al montar */}
+        <video
+          ref={videoRef}
+          className="h-full w-full"
+          playsInline
+          controls
+          preload="metadata"
+          aria-label="Vista previa del video"
+        />
+
+        {/* Placeholder encima mientras no hay video cargado */}
+        {!video && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 text-slate-400 bg-slate-950">
             <div className="rounded-2xl bg-slate-800/50 p-6 ring-1 ring-white/5">
               <FileVideo className="h-16 w-16 text-slate-500" strokeWidth={1.5} aria-hidden="true" />
             </div>
@@ -280,15 +260,6 @@ export function VideoPlayer({
               <p className="mt-1 text-sm text-slate-500">Carga un archivo para comenzar la edicion</p>
             </div>
           </div>
-        ) : (
-          <video
-            ref={videoRef}
-            className="h-full w-full"
-            playsInline
-            controls
-            preload="metadata"
-            aria-label="Vista previa del video"
-          />
         )}
       </div>
       <div className="mt-4 flex items-center justify-between rounded-xl bg-slate-800/40 px-4 py-2.5 ring-1 ring-white/5 backdrop-blur-sm">

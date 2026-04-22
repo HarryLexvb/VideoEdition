@@ -1,4 +1,4 @@
-import { AudioLines, Clapperboard, Download, Loader2, RotateCcw, Upload, Video } from 'lucide-react';
+import { Clapperboard, Download, Loader2, RotateCcw, Upload, Video } from 'lucide-react';
 
 import { Button } from '../../../shared/components/Button';
 import { StatusBadge } from '../../../shared/components/StatusBadge';
@@ -17,10 +17,8 @@ interface HeaderBarProps {
   isTusEnabled: boolean;
   activeJob: JobStatusResponse | null;
   exporting: boolean;
-  extractingAudio: boolean;
   onOpenUploader: () => void;
   onExport: () => void;
-  onExtractAudio: () => void;
   onResetProject: () => void;
 }
 
@@ -66,10 +64,8 @@ export function HeaderBar({
   isTusEnabled,
   activeJob,
   exporting,
-  extractingAudio,
   onOpenUploader,
   onExport,
-  onExtractAudio,
   onResetProject,
 }: HeaderBarProps) {
   return (
@@ -100,7 +96,7 @@ export function HeaderBar({
               <div className="rounded-lg bg-white/20 p-1.5 backdrop-blur-sm">
                 <Video className="h-4 w-4" aria-hidden="true" />
               </div>
-              <span className="text-sm font-bold tracking-wide">Cargar Video</span>
+              <span className="text-sm font-bold tracking-wide">1. Cargar Video</span>
               <Upload className="h-4 w-4 transition-transform duration-300 group-hover:-translate-y-0.5" aria-hidden="true" />
             </div>
 
@@ -108,13 +104,9 @@ export function HeaderBar({
             <div className="absolute inset-0 rounded-xl bg-gradient-to-r from-brand-400 via-cyan-400 to-brand-400 opacity-0 blur-lg transition-opacity duration-300 group-hover:opacity-50" />
           </button>
 
-          <Button onClick={onExport} loading={exporting} disabled={!video || extractingAudio}>
+          <Button onClick={onExport} loading={exporting} disabled={!video}>
             <Download className="h-4 w-4" aria-hidden="true" />
-            Exportar
-          </Button>
-          <Button variant="secondary" onClick={onExtractAudio} loading={extractingAudio} disabled={!video || exporting}>
-            <AudioLines className="h-4 w-4" aria-hidden="true" />
-            Extraer audio
+            5. Exportar
           </Button>
           <Button variant="ghost" onClick={onResetProject} disabled={!video}>
             <RotateCcw className="h-4 w-4" aria-hidden="true" />
@@ -159,31 +151,33 @@ export function HeaderBar({
           {!isTusEnabled ? <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">Define VITE_TUS_ENDPOINT para activar envio resumable.</p> : null}
         </section>
 
-        <section className="rounded-2xl border border-slate-200/80 bg-white/80 p-4 dark:border-slate-700/50 dark:bg-slate-800/70">
-          <div className="flex items-center justify-between gap-3">
-            <h2 className="text-sm font-semibold text-slate-800 dark:text-slate-200">Procesamiento backend</h2>
-            {activeJob ? (
-              <StatusBadge tone={getProcessingTone(activeJob.status)}>{activeJob.status}</StatusBadge>
-            ) : (
-              <StatusBadge>Sin tarea</StatusBadge>
-            )}
-          </div>
-          {activeJob ? (
-            <div className="mt-3 text-sm text-slate-600 dark:text-slate-400">
-              <p>ID: {activeJob.jobId}</p>
-              {typeof activeJob.progress === 'number' ? <p>Progreso: {Math.round(activeJob.progress)}%</p> : null}
-              {activeJob.message ? <p>{activeJob.message}</p> : null}
-              {activeJob.status === 'queued' || activeJob.status === 'processing' ? (
-                <p className="mt-2 inline-flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
-                  Polling activo
-                </p>
-              ) : null}
+        {import.meta.env.VITE_API_BASE_URL ? (
+          <section className="rounded-2xl border border-slate-200/80 bg-white/80 p-4 dark:border-slate-700/50 dark:bg-slate-800/70">
+            <div className="flex items-center justify-between gap-3">
+              <h2 className="text-sm font-semibold text-slate-800 dark:text-slate-200">Procesamiento backend</h2>
+              {activeJob ? (
+                <StatusBadge tone={getProcessingTone(activeJob.status)}>{activeJob.status}</StatusBadge>
+              ) : (
+                <StatusBadge>Sin tarea</StatusBadge>
+              )}
             </div>
-          ) : (
-            <p className="mt-3 text-sm text-slate-500 dark:text-slate-400">Lanza exportacion o extraccion para iniciar una tarea.</p>
-          )}
-        </section>
+            {activeJob ? (
+              <div className="mt-3 text-sm text-slate-600 dark:text-slate-400">
+                <p>ID: {activeJob.jobId}</p>
+                {typeof activeJob.progress === 'number' ? <p>Progreso: {Math.round(activeJob.progress)}%</p> : null}
+                {activeJob.message ? <p>{activeJob.message}</p> : null}
+                {activeJob.status === 'queued' || activeJob.status === 'processing' ? (
+                  <p className="mt-2 inline-flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+                    Polling activo
+                  </p>
+                ) : null}
+              </div>
+            ) : (
+              <p className="mt-3 text-sm text-slate-500 dark:text-slate-400">Lanza exportacion o extraccion para iniciar una tarea.</p>
+            )}
+          </section>
+        ) : null}
       </div>
     </header>
   );

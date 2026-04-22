@@ -6,6 +6,7 @@ import { clampTime, createInitialSegment, normalizeSegmentsForDuration, splitSeg
 import type {
   EditorSnapshot,
   HistoryRecord,
+  MediaTrack,
   SegmentDisposition,
   SnapshotRecord,
   TimelineSegment,
@@ -18,6 +19,8 @@ interface EditorStore extends EditorSnapshot {
   future: SnapshotRecord[];
   uploadState: UploadState;
   uploadMessage: string | null;
+  audioExtracted: boolean;
+
   setVideo: (video: VideoAsset) => void;
   setVideoDuration: (duration: number) => void;
   setVideoUploadId: (uploadId: string) => void;
@@ -25,11 +28,35 @@ interface EditorStore extends EditorSnapshot {
   setPlayheadTime: (time: number) => void;
   seekTo: (time: number) => void;
   selectSegment: (segmentId: string | null) => void;
+  toggleTrackMute: (trackId: string) => void;
+  selectTrack: (trackId: string, multi?: boolean) => void;
+  clearTrackSelection: () => void;
   addCutAt: (time: number) => void;
   addCutAtPlayhead: () => void;
+  setSegmentsFromCustomRanges: (
+    ranges: Array<{ start: number; end: number }>,
+    selectedRange?: { start: number; end: number },
+  ) => void;
   setSegmentDisposition: (segmentId: string, disposition: SegmentDisposition) => void;
   setSelectedSegmentDisposition: (disposition: SegmentDisposition) => void;
   toggleSegmentDisposition: (segmentId: string) => void;
+  setTrimStart: (time: number | null) => void;
+  setTrimEnd: (time: number | null) => void;
+  setTrimRange: (start: number | null, end: number | null) => void;
+  setTrimStartAtPlayhead: () => void;
+  setTrimEndAtPlayhead: () => void;
+  clearTrimRange: () => void;
+  validateTrimRange: () => boolean;
+  /**
+   * Locally extract audio: creates a dedicated audio track from the same video source.
+   * The video track is muted. Both tracks are shown in the timeline.
+   * Returns true if extraction succeeded, false if conditions are not met.
+   */
+  extractAudioLocally: () => boolean;
+  /** Associate a PNG capture (dataUrl) with the given segment. */
+  addCaptureToSegment: (segmentId: string, dataUrl: string, videoTime: number) => void;
+  /** Remove a specific capture from a segment. */
+  removeCaptureFromSegment: (segmentId: string, captureId: string) => void;
   resetProject: () => void;
   undo: () => void;
   redo: () => void;
@@ -46,18 +73,32 @@ function createHistoryRecord(label: string): HistoryRecord {
 function snapshotFromState(state: EditorStore): EditorSnapshot {
   return {
     video: state.video ? { ...state.video } : null,
-    segments: state.segments.map((segment) => ({ ...segment })),
+    tracks: state.tracks.map((t) => ({ ...t })),
+    segments: state.segments.map((segment) => ({
+      ...segment,
+      captures: segment.captures.map((c) => ({ ...c })),
+    })),
     selectedSegmentId: state.selectedSegmentId,
+    selectedTrackIds: [...state.selectedTrackIds],
     playheadTime: state.playheadTime,
+    trimStart: state.trimStart,
+    trimEnd: state.trimEnd,
   };
 }
 
 function cloneSnapshot(snapshot: EditorSnapshot): EditorSnapshot {
   return {
     video: snapshot.video ? { ...snapshot.video } : null,
-    segments: snapshot.segments.map((segment) => ({ ...segment })),
+    tracks: snapshot.tracks.map((t) => ({ ...t })),
+    segments: snapshot.segments.map((segment) => ({
+      ...segment,
+      captures: segment.captures.map((c) => ({ ...c })),
+    })),
     selectedSegmentId: snapshot.selectedSegmentId,
+    selectedTrackIds: [...snapshot.selectedTrackIds],
     playheadTime: snapshot.playheadTime,
+    trimStart: snapshot.trimStart,
+    trimEnd: snapshot.trimEnd,
   };
 }
 
@@ -89,30 +130,80 @@ function getDurationFromVideo(video: VideoAsset | null): number {
   return video.duration;
 }
 
+function normalizeCustomRanges(
+  ranges: Array<{ start: number; end: number }>,
+  duration: number,
+): Array<{ start: number; end: number }> {
+  if (duration <= 0) return [];
+
+  const sorted = ranges
+    .map((r) => ({
+      start: clampTime(Number(r.start), duration),
+      end: clampTime(Number(r.end), duration),
+    }))
+    .filter((r) => Number.isFinite(r.start) && Number.isFinite(r.end) && r.end - r.start > 0.01)
+    .sort((a, b) => a.start - b.start);
+
+  const deduped: Array<{ start: number; end: number }> = [];
+  for (const range of sorted) {
+    const prev = deduped[deduped.length - 1];
+    if (prev && Math.abs(prev.start - range.start) < 0.01 && Math.abs(prev.end - range.end) < 0.01) {
+      continue;
+    }
+    deduped.push({
+      start: Number(range.start.toFixed(3)),
+      end: Number(range.end.toFixed(3)),
+    });
+  }
+
+  return deduped;
+}
+
 function createDefaultSegmentsForVideo(video: VideoAsset | null): TimelineSegment[] {
   return [createInitialSegment(video?.duration ?? 0)];
 }
 
+function createVideoTrack(video: VideoAsset): MediaTrack {
+  return {
+    id: createId('track-video'),
+    kind: 'video',
+    label: video.fileName,
+    sourceUrl: video.localUrl,
+    duration: video.duration,
+    muted: false,
+  };
+}
+
 export const useEditorStore = create<EditorStore>((set, get) => ({
   video: null,
+  tracks: [],
   segments: createDefaultSegmentsForVideo(null),
   selectedSegmentId: null,
+  selectedTrackIds: [],
   playheadTime: 0,
+  trimStart: null,
+  trimEnd: null,
   past: [],
   future: [],
   uploadState: 'idle',
   uploadMessage: null,
+  audioExtracted: false,
 
   setVideo: (video) => {
     set({
       video,
+      tracks: [createVideoTrack(video)],
       segments: createDefaultSegmentsForVideo(video),
       selectedSegmentId: null,
+      selectedTrackIds: [],
       playheadTime: 0,
+      trimStart: null,
+      trimEnd: null,
       past: [],
       future: [],
       uploadState: video.uploadId ? 'uploaded' : 'idle',
       uploadMessage: null,
+      audioExtracted: false,
     });
   },
 
@@ -128,12 +219,20 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
         duration: safeDuration,
       };
 
+      // Update duration on the video track too
+      const updatedTracks = state.tracks.map((t) =>
+        t.kind === 'video' && t.sourceUrl === state.video!.localUrl
+          ? { ...t, duration: safeDuration }
+          : t,
+      );
+
       const updatedSegments = normalizeSegmentsForDuration(state.segments, safeDuration);
       const updatedPlayhead = clampTime(state.playheadTime, safeDuration);
 
       return {
         ...state,
         video: updatedVideo,
+        tracks: updatedTracks,
         segments: updatedSegments,
         playheadTime: updatedPlayhead,
       };
@@ -193,6 +292,34 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
     }));
   },
 
+  toggleTrackMute: (trackId) => {
+    set((state) => {
+      const idx = state.tracks.findIndex((t) => t.id === trackId);
+      if (idx === -1) return state;
+      const updatedTracks = state.tracks.map((t, i) =>
+        i === idx ? { ...t, muted: !t.muted } : t,
+      );
+      return { ...state, tracks: updatedTracks };
+    });
+  },
+
+  selectTrack: (trackId, multi = false) => {
+    set((state) => {
+      if (multi) {
+        const already = state.selectedTrackIds.includes(trackId);
+        const next = already
+          ? state.selectedTrackIds.filter((id) => id !== trackId)
+          : [...state.selectedTrackIds, trackId];
+        return { ...state, selectedTrackIds: next };
+      }
+      return { ...state, selectedTrackIds: [trackId] };
+    });
+  },
+
+  clearTrackSelection: () => {
+    set((state) => ({ ...state, selectedTrackIds: [] }));
+  },
+
   addCutAt: (time) => {
     set((state) =>
       updateWithHistory(state, `Corte en ${formatTime(time)}`, (snapshot) => {
@@ -220,6 +347,83 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
   addCutAtPlayhead: () => {
     const state = get();
     state.addCutAt(state.playheadTime);
+  },
+
+  setSegmentsFromCustomRanges: (ranges, selectedRange) => {
+    set((state) =>
+      updateWithHistory(state, 'Actualizar segmentos personalizados', (snapshot) => {
+        const duration = getDurationFromVideo(snapshot.video);
+        const normalizedRanges = normalizeCustomRanges(ranges, duration);
+
+        const existingByRangeKey = new Map(
+          snapshot.segments.map((segment) => [
+            `${segment.start.toFixed(3)}-${segment.end.toFixed(3)}`,
+            segment,
+          ]),
+        );
+
+        const nextSegments: TimelineSegment[] = normalizedRanges.map((range) => {
+          const key = `${range.start.toFixed(3)}-${range.end.toFixed(3)}`;
+          const existing = existingByRangeKey.get(key);
+
+          return {
+            id: existing?.id ?? createId('segment'),
+            start: range.start,
+            end: range.end,
+            disposition: 'keep',
+            captures: existing?.captures ?? [],
+          };
+        });
+
+        const unchanged =
+          snapshot.segments.length === nextSegments.length &&
+          snapshot.segments.every((seg, index) => {
+            const next = nextSegments[index];
+            if (!next) return false;
+            return (
+              Math.abs(seg.start - next.start) < 0.001 &&
+              Math.abs(seg.end - next.end) < 0.001 &&
+              seg.disposition === next.disposition
+            );
+          });
+
+        if (unchanged) {
+          return null;
+        }
+
+        let selectedSegmentId: string | null = null;
+
+        if (selectedRange) {
+          const selected = nextSegments.find(
+            (segment) =>
+              Math.abs(segment.start - selectedRange.start) < 0.01 &&
+              Math.abs(segment.end - selectedRange.end) < 0.01,
+          );
+          selectedSegmentId = selected?.id ?? null;
+        }
+
+        if (!selectedSegmentId && snapshot.selectedSegmentId) {
+          const existing = nextSegments.find((segment) => segment.id === snapshot.selectedSegmentId);
+          selectedSegmentId = existing?.id ?? null;
+        }
+
+        if (!selectedSegmentId && nextSegments.length > 0) {
+          selectedSegmentId = nextSegments[0].id;
+        }
+
+        const nextPlayhead =
+          selectedSegmentId !== null
+            ? nextSegments.find((segment) => segment.id === selectedSegmentId)?.start ?? snapshot.playheadTime
+            : snapshot.playheadTime;
+
+        return {
+          ...snapshot,
+          segments: nextSegments,
+          selectedSegmentId,
+          playheadTime: clampTime(nextPlayhead, duration),
+        };
+      }),
+    );
   },
 
   setSegmentDisposition: (segmentId, disposition) => {
@@ -270,26 +474,207 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
     state.setSegmentDisposition(segmentId, segment.disposition === 'keep' ? 'remove' : 'keep');
   },
 
+  setTrimStart: (time) => {
+    set((state) => {
+      const duration = getDurationFromVideo(state.video);
+      if (duration <= 0) {
+        return state;
+      }
+
+      const clampedTime = time !== null ? clampTime(time, duration) : null;
+
+      if (clampedTime !== null && state.trimEnd !== null && clampedTime >= state.trimEnd) {
+        return state;
+      }
+
+      return {
+        ...state,
+        trimStart: clampedTime,
+      };
+    });
+  },
+
+  setTrimEnd: (time) => {
+    set((state) => {
+      const duration = getDurationFromVideo(state.video);
+      if (duration <= 0) {
+        return state;
+      }
+
+      const clampedTime = time !== null ? clampTime(time, duration) : null;
+
+      if (clampedTime !== null && state.trimStart !== null && clampedTime <= state.trimStart) {
+        return state;
+      }
+
+      return {
+        ...state,
+        trimEnd: clampedTime,
+      };
+    });
+  },
+
+  setTrimRange: (start, end) => {
+    set((state) => {
+      const duration = getDurationFromVideo(state.video);
+      if (duration <= 0) {
+        return state;
+      }
+
+      const clampedStart = start !== null ? clampTime(start, duration) : null;
+      const clampedEnd = end !== null ? clampTime(end, duration) : null;
+
+      if (clampedStart !== null && clampedEnd !== null && clampedStart >= clampedEnd) {
+        return state;
+      }
+
+      return updateWithHistory(state, `Trim: ${formatTime(clampedStart ?? 0)} - ${formatTime(clampedEnd ?? duration)}`, (snapshot) => ({
+        ...snapshot,
+        trimStart: clampedStart,
+        trimEnd: clampedEnd,
+      }));
+    });
+  },
+
+  setTrimStartAtPlayhead: () => {
+    const state = get();
+    state.setTrimStart(state.playheadTime);
+  },
+
+  setTrimEndAtPlayhead: () => {
+    const state = get();
+    state.setTrimEnd(state.playheadTime);
+  },
+
+  clearTrimRange: () => {
+    set((state) =>
+      updateWithHistory(state, 'Limpiar trim', (snapshot) => ({
+        ...snapshot,
+        trimStart: null,
+        trimEnd: null,
+      }))
+    );
+  },
+
+  validateTrimRange: () => {
+    const state = get();
+    if (state.trimStart === null || state.trimEnd === null) {
+      return false;
+    }
+    return state.trimStart < state.trimEnd;
+  },
+
+  extractAudioLocally: () => {
+    const state = get();
+
+    if (!state.video) {
+      console.warn('[EditorStore] extractAudioLocally: no video loaded');
+      return false;
+    }
+
+    if (state.audioExtracted) {
+      console.warn('[EditorStore] extractAudioLocally: audio already extracted');
+      return false;
+    }
+
+    const videoTrackIndex = state.tracks.findIndex((t) => t.kind === 'video');
+    if (videoTrackIndex === -1) {
+      console.warn('[EditorStore] extractAudioLocally: no video track found');
+      return false;
+    }
+
+    const videoTrack = state.tracks[videoTrackIndex];
+
+    // Mute the video track
+    const mutedVideoTrack: MediaTrack = { ...videoTrack, muted: true };
+
+    // Create an audio track using the same source URL
+    // The browser will decode only the audio from the video file
+    const audioTrack: MediaTrack = {
+      id: createId('track-audio'),
+      kind: 'audio',
+      label: `Audio - ${state.video.fileName}`,
+      sourceUrl: state.video.localUrl,
+      duration: state.video.duration,
+      muted: false,
+    };
+
+    const updatedTracks = [...state.tracks];
+    updatedTracks[videoTrackIndex] = mutedVideoTrack;
+    updatedTracks.push(audioTrack);
+
+    set({
+      ...state,
+      tracks: updatedTracks,
+      audioExtracted: true,
+    });
+
+    return true;
+  },
+
+  addCaptureToSegment: (segmentId, dataUrl, videoTime) => {
+    set((state) => ({
+      ...state,
+      segments: state.segments.map((seg) =>
+        seg.id === segmentId
+          ? {
+              ...seg,
+              captures: [
+                ...seg.captures,
+                {
+                  id: createId('capture'),
+                  dataUrl,
+                  videoTime,
+                  timestamp: new Date().toISOString(),
+                },
+              ],
+            }
+          : seg,
+      ),
+    }));
+  },
+
+  removeCaptureFromSegment: (segmentId, captureId) => {
+    set((state) => ({
+      ...state,
+      segments: state.segments.map((seg) =>
+        seg.id === segmentId
+          ? { ...seg, captures: seg.captures.filter((c) => c.id !== captureId) }
+          : seg,
+      ),
+    }));
+  },
+
   resetProject: () => {
     set((state) => {
       if (!state.video) {
         return {
           ...state,
+          tracks: [],
           segments: createDefaultSegmentsForVideo(null),
           selectedSegmentId: null,
+          selectedTrackIds: [],
           playheadTime: 0,
+          trimStart: null,
+          trimEnd: null,
           past: [],
           future: [],
+          audioExtracted: false,
         };
       }
 
       return {
         ...state,
+        tracks: [createVideoTrack(state.video)],
         segments: createDefaultSegmentsForVideo(state.video),
         selectedSegmentId: null,
+        selectedTrackIds: [],
         playheadTime: 0,
+        trimStart: null,
+        trimEnd: null,
         past: [],
         future: [],
+        audioExtracted: false,
       };
     });
   },

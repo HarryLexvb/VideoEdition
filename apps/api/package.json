@@ -1,0 +1,31 @@
+{
+  "name": "videoedition-api",
+  "version": "0.0.1",
+  "description": "Backend API para el editor web de video",
+  "main": "dist/server.js",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "build": "tsc",
+    "start": "node dist/server.js",
+    "test": "tsx --test src/services/ffmpeg.test.ts src/services/segments.test.ts"
+  },
+  "dependencies": {
+    "@fastify/cors": "^9.0.1",
+    "@fastify/static": "^7.0.4",
+    "archiver": "^7.0.1",
+    "dotenv": "^16.4.5",
+    "fastify": "^4.28.1",
+    "fluent-ffmpeg": "^2.1.3",
+    "openai": "^6.34.0",
+    "pino-pretty": "^11.2.1",
+    "uuid": "^10.0.0"
+  },
+  "devDependencies": {
+    "@types/archiver": "^7.0.0",
+    "@types/fluent-ffmpeg": "^2.1.27",
+    "@types/node": "^20.14.9",
+    "@types/uuid": "^10.0.0",
+    "tsx": "^4.15.7",
+    "typescript": "^5.5.2"
+  }
+}

@@ -1,307 +1,310 @@
 # VideoCut Studio
 
-> Editor de video no destructivo con interfaz profesional para cargar, visualizar y editar videos localmente mediante timeline interactivo.
+Editor de video no destructivo con frontend React + Vite y backend Fastify + FFmpeg + OpenAI Whisper.
 
-## 🎯 Estado Actual
+## Autor
 
-**✅ Frontend 100% Funcional | ❌ Backend No Implementado**
+Harold Alejandro Villanueva Borda
+- Email: harrylex8@gmail.com
+- Repositorio: https://github.com/HarryLexvb/VideoEdition
 
-### ✨ Funcionalidades Implementadas
+---
 
-- ✅ **Carga de videos** (hasta 2GB) - Drag & drop o click
-- ✅ **Preview profesional** con controles Plyr
-- ✅ **Timeline interactivo** con waveform (WaveSurfer.js)
-- ✅ **Sistema de segmentos** con marcado keep/remove
-- ✅ **Undo/Redo completo** (Ctrl+Z / Ctrl+Shift+Z)
-- ✅ **Dark mode** con persistencia
-- ✅ **Gestión de estado** con Zustand
-- ✅ **UI responsive** con Tailwind CSS
+## Funcionalidades
 
-### ⚠️ Limitaciones Actuales
+### Frontend (sin backend requerido)
+- Carga de video local con Uppy (drag & drop o file picker)
+- Upload reanudable con Tus (requiere `VITE_TUS_ENDPOINT`)
+- Preview de video nativo (HTMLVideoElement)
+- Timeline con pistas diferenciadas:
+  - **Pista de video**: tira de miniaturas generadas con Canvas API
+  - **Pista de audio**: forma de onda generada con Web Audio API (OfflineAudioContext)
+- Extraccion de audio local (sin backend): crea pista de audio visual, silencia el video
+- Segmentos keep/remove con historial undo/redo
+- Capturas de fotogramas por segmento
+- Trim range visual en timeline
+- Extraccion personalizada por rangos
+- Modo oscuro / claro
+- Atajos de teclado: `Ctrl+Z` / `Ctrl+Shift+Z`
 
-**NO funciona sin backend:**
-- ❌ Export real de video editado
-- ❌ Extracción de audio
-- ❌ Procesamiento con FFmpeg
-- ❌ API/Backend
-- ❌ Storage persistente
-- ❌ Sistema de jobs
+### Backend (requiere Docker o `apps/api`)
+- Exportacion de video con FFmpeg (segmentos keep concatenados, sin re-encode)
+- Extraccion de audio por segmento (MP3 individual por segmento keep)
+- **Transcripcion automatica con OpenAI Whisper** — genera `transcripcion.txt` incluido en el ZIP
+- Descarga en ZIP organizado por carpetas (audio + capturas + transcripcion por segmento)
+- Polling de estado de jobs en tiempo real
 
-## 🛠️ Stack Tecnológico
+---
 
-| Categoría | Tecnologías |
-|-----------|-------------|
-| **Core** | React 19.2, TypeScript 5.9, Vite 8 |
-| **Estado** | Zustand 5, TanStack Query 5 |
-| **UI** | Tailwind CSS 3, Lucide React 1 |
-| **Media** | Plyr 3.8 (player), WaveSurfer.js 7 (timeline) |
-| **Upload** | Uppy 5 (con soporte Tus opcional) |
-| **Routing** | React Router DOM 6 |
+## Stack
 
-## 📋 Requisitos
+### Frontend
 
-- **Node.js** 18+ (probado con v23.2.0)
-- **npm** 9+ (probado con 10.9.0)
-- **Navegador moderno** con soporte para:
-  - ES2020+, File API, Blob, URL.createObjectURL
-  - Codec H.264/AAC recomendado
+| Capa | Tecnologia |
+|------|-----------|
+| Framework | React 19 |
+| Bundler | Vite 8 |
+| Lenguaje | TypeScript 5.9 |
+| Estado | Zustand 5 |
+| API async | TanStack React Query 5 |
+| Upload | Uppy 5 + Tus |
+| Estilos | Tailwind CSS 3 |
+| Iconos | Lucide React |
+| ZIP client-side | JSZip |
+| Router | React Router DOM 6 |
 
-## 🚀 Instalación
+### Backend
+
+| Capa | Tecnologia |
+|------|-----------|
+| Framework | Fastify 4 |
+| Procesamiento de video/audio | FFmpeg (fluent-ffmpeg) |
+| Transcripcion | OpenAI Whisper (whisper-1) |
+| Upload server | tusd |
+| Empaquetado | archiver |
+| Jobs | En memoria (Map) |
+
+### Infraestructura
+
+| Componente | Tecnologia |
+|-----------|-----------|
+| Contenedores | Docker + Docker Compose |
+| Proxy / SPA | Nginx |
+| VPS recomendado | Hostinger KVM (Ubuntu) |
+
+---
+
+## Endpoints del backend
+
+| Metodo | Ruta | Descripcion |
+|--------|------|-------------|
+| `GET` | `/health` | Health check |
+| `POST` | `/jobs/export` | Exportar video (segmentos keep concatenados) |
+| `POST` | `/jobs/extract-audio` | Extraer audio MP3 por segmento |
+| `POST` | `/jobs/transcribe` | Transcribir segmentos de audio con Whisper |
+| `GET` | `/jobs/:jobId` | Estado del job (polling) |
+| `GET` | `/results/:filename` | Descargar archivo procesado |
+| `POST` | `/results/zip-segments` | ZIP organizado (audio + capturas + transcripcion.txt) |
+| `POST` | `/results/zip` | ZIP simple de archivos |
+| `POST` | `/hooks/upload` | Webhook tusd (post-finish) |
+
+---
+
+## Flujo de transcripcion
+
+1. Subir video → extraer audio (genera MP3 por segmento en el servidor)
+2. El botton **"Transcripcion"** aparece cuando los segmentos estan listos
+3. Click → job asincronico a OpenAI Whisper por cada segmento
+4. Cuando completa, el boton cambia a **"Transcripcion lista"**
+5. Descargar ZIP → incluye `transcripcion.txt` en la raiz con el texto de cada segmento:
+
+```
+=== Segmento 1 (0:12 - 0:18) ===
+Texto transcrito del primer segmento.
+
+=== Segmento 2 (1:25 - 1:40) ===
+Texto transcrito del segundo segmento.
+```
+
+---
+
+## Como ejecutar
+
+### Opcion A — Solo frontend (sin backend)
 
 ```bash
-# Clonar repositorio
-git clone https://github.com/HarryLexvb/VideoEdition.git
-cd VideoEdition
-
-# Instalar dependencias
 npm install
+npm run dev
+# http://localhost:5173
+```
 
-# Iniciar desarrollo
+Funcionalidades disponibles: carga, preview, timeline, extraccion de audio local, segmentos, trim, historial, capturas.
+
+### Opcion B — Frontend + backend en Docker
+
+```bash
+# 1. Crear .env en la raiz (ver Variables de entorno)
+# 2. Levantar
+docker compose up -d api tusd
 npm run dev
 ```
 
-Accede en: `http://localhost:5173`
-
-## 📖 Guía de Uso
-
-### 1️⃣ Cargar Video
-
-1. Click en **"Cargar Video"** (botón con gradiente en la esquina superior derecha)
-2. En el modal:
-   - **Arrastra** un video al área gris
-   - **O haz click** en el área gris para abrir el selector de archivos
-3. **Formatos:** MP4 (H.264/AAC), WebM, MOV
-4. **Máximo:** 2GB
-
-### 2️⃣ Visualizar
-
-- El **preview** aparece arriba con controles de reproducción
-- El **timeline con waveform** se genera automáticamente debajo
-- Espera unos segundos mientras carga los metadatos
-
-### 3️⃣ Editar
-
-- **Cortar:** Click en "Cortar en cabezal" para dividir en el punto actual
-- **Navegar:** Click en el timeline para mover el playhead
-- **Reproducir:** Usa los controles del player
-
-### 4️⃣ Gestionar Segmentos
-
-**Panel lateral derecho:**
-- Ver lista de segmentos creados
-- Click en segmento para seleccionar
-- Marcar como:
-  - 🟢 **Keep** (verde) - Conservar
-  - 🔴 **Remove** (rojo) - Eliminar
-- **Undo/Redo:** Ctrl+Z / Ctrl+Shift+Z
-
-### 5️⃣ Exportar (⚠️ No Funcional)
-
-Los botones "Exportar" y "Extraer audio" preparan la configuración pero **NO procesan el video** porque no hay backend implementado.
-
-## 🏗️ Estructura del Proyecto
-
-```
-VideoEdition/
-├── src/
-│   ├── features/
-│   │   └── editor/
-│   │       ├── api/              # Hooks API (preparados para backend)
-│   │       ├── components/        # Componentes del editor
-│   │       │   ├── VideoPlayer.tsx
-│   │       │   ├── TimelinePanel.tsx
-│   │       │   ├── SidebarPanel.tsx
-│   │       │   └── HeaderBar.tsx
-│   │       ├── hooks/            # useVideoUpload
-│   │       ├── model/            # Types y lógica de negocio
-│   │       ├── pages/            # EditorPage
-│   │       └── store/            # Zustand store
-│   ├── shared/
-│   │   ├── components/           # Button, StatusBadge, ThemeToggle
-│   │   ├── contexts/             # ThemeContext
-│   │   └── lib/                  # Utilidades (formatTime, id)
-│   ├── router/                   # AppRouter
-│   └── styles/                   # global.css
-├── public/
-└── index.html
-```
-
-## 🐛 Troubleshooting
-
-### El video no carga
-
-**Síntomas:** No aparece preview ni timeline
-
-**Soluciones:**
-1. Usa MP4 H.264/AAC (mayor compatibilidad)
-2. Abre DevTools (F12) → Console
-3. Busca logs con `[VideoPlayer]` o `[TimelinePanel]`
-
-**Logs esperados (éxito):**
-```
-[EditorPage] Video seleccionado: video.mp4 URL creada: blob:...
-[VideoPlayer] 🎬 Cargando video: video.mp4
-[VideoPlayer] ✓ loadedmetadata - Duración: 120.5 segundos
-[TimelinePanel] ✓ Inicializando WaveSurfer
-[TimelinePanel] ✓ WaveSurfer creado exitosamente
-```
-
-### El área de carga no funciona
-
-**Solución:**
-- El área **gris/azul** en el centro del modal ES clickeable
-- Haz click directamente en el área de drop zone
-- O arrastra el archivo sobre ella
-
-### Timeline no aparece
-
-**Causas:**
-- Video aún cargando metadatos (espera unos segundos)
-- Formato incompatible
-- Video corrupto
-
-**Verifica:**
-- Footer muestra "Media: conectado"
-- Console muestra logs de WaveSurfer
-- Prueba con otro video más pequeño
-
-### Formatos Soportados
-
-**✅ Recomendados:**
-- MP4 (H.264 + AAC)
-- WebM (VP8/VP9 + Vorbis/Opus)
-
-**⚠️ Pueden fallar:**
-- AVI (depende del codec)
-- MKV (no nativo en navegador)
-- Videos 4K+ (carga muy lenta)
-- Códecs exóticos
-
-## 📦 Scripts
+### Opcion C — Stack completo en Docker
 
 ```bash
-npm run dev         # Desarrollo (puerto 5173)
-npm run build       # Producción
-npm run preview     # Preview del build
-npm run typecheck   # Verificar tipos TS
+docker compose up --build -d
+# Web: http://localhost
+# API: http://localhost:3000
+# Tusd: http://localhost:1080/files/
 ```
 
-## ⚙️ Variables de Entorno
+---
+
+## Variables de entorno
+
+Copia `.env.example` como `.env` en la raiz y como `apps/api/.env`.
+
+### Frontend / Docker build (`raiz/.env`)
+
+| Variable | Default Docker | VPS |
+|----------|---------------|-----|
+| `VITE_API_BASE_URL` | `http://127.0.0.1:3000` | `https://tudominio.com/api` |
+| `VITE_TUS_ENDPOINT` | `http://127.0.0.1:1080/files/` | `https://tudominio.com/files/` |
+| `PUBLIC_API_URL` | `http://127.0.0.1:3000` | `https://tudominio.com/api` |
+| `CORS_ORIGIN` | `*` | `https://tudominio.com` |
+| `OPENAI_API_KEY` | — | `sk-proj-...` (requerido para transcripcion) |
+
+### Backend (`apps/api/.env`)
+
+| Variable | Default | Descripcion |
+|----------|---------|-------------|
+| `PORT` | `3000` | Puerto del servidor |
+| `HOST` | `0.0.0.0` | Host de escucha |
+| `UPLOADS_DIR` | `./uploads` | Directorio de archivos subidos por tusd |
+| `RESULTS_DIR` | `./results` | Directorio de resultados procesados |
+| `TEMP_DIR` | `./temp` | Directorio temporal FFmpeg |
+| `FFMPEG_PATH` | auto | Ruta a binario ffmpeg |
+| `FFPROBE_PATH` | auto | Ruta a binario ffprobe |
+| `CORS_ORIGIN` | `*` | Origen permitido en CORS |
+| `PUBLIC_API_URL` | `http://localhost:3000` | URL publica para construir resultUrls |
+| `OPENAI_API_KEY` | — | API key de OpenAI (requerida para transcripcion) |
+
+> Los archivos `.env` y `apps/api/.env` estan en `.gitignore` — nunca se suben al repositorio.
+
+---
+
+## Deploy en VPS (Hostinger via SSH + GitHub)
+
+### 1. Instalar Docker (una sola vez)
 
 ```bash
-# .env (opcional)
-VITE_TUS_ENDPOINT=http://localhost:3000/upload/tus
+ssh usuario@IP_VPS
+curl -fsSL https://get.docker.com | sh
+sudo usermod -aG docker $USER
+exit && ssh usuario@IP_VPS   # reconectar para aplicar grupo
+docker --version && docker compose version
 ```
 
-Si defines esto, habilita upload reanudable vía Tus (requiere backend).
+### 2. Configurar SSH key para GitHub (una sola vez)
 
-## 🎨 Características UI
+```bash
+ssh-keygen -t ed25519 -C "vps-videoedition" -f ~/.ssh/github_vps -N ""
+cat ~/.ssh/github_vps.pub   # copiar este output
+```
 
-- Gradientes modernos y sombras suaves
-- Animación shimmer en botón principal
-- Transiciones fluidas (300ms)
-- Dark mode completo
-- Responsive (desktop y tablets)
-- ARIA labels para accesibilidad
+Pegar la clave en **GitHub → Settings → SSH and GPG keys → New SSH key**.
 
-## ⚠️ IMPORTANTE - Leer Antes de Usar
+```bash
+cat >> ~/.ssh/config << 'EOF'
+Host github.com
+  IdentityFile ~/.ssh/github_vps
+  StrictHostKeyChecking no
+EOF
+ssh -T git@github.com   # debe responder: Hi HarryLexvb!
+```
 
-### Este es un Editor Frontend Únicamente
+### 3. Clonar y configurar
 
-**Lo que SÍ hace:**
-- ✅ Cargar y reproducir videos localmente
-- ✅ Visualizar waveform
-- ✅ Crear y marcar segmentos
-- ✅ Gestionar historial de cambios
+```bash
+git clone git@github.com:HarryLexvb/VideoEdition.git
+cd VideoEdition
 
-**Lo que NO hace:**
-- ❌ NO exporta video procesado
-- ❌ NO extrae audio real
-- ❌ NO guarda proyectos
-- ❌ NO procesa video con FFmpeg
+# .env de produccion (raiz)
+cat > .env << 'EOF'
+VITE_API_BASE_URL=https://TUDOMINIO.COM/api
+VITE_TUS_ENDPOINT=https://TUDOMINIO.COM/files/
+PUBLIC_API_URL=https://TUDOMINIO.COM/api
+CORS_ORIGIN=https://TUDOMINIO.COM
+OPENAI_API_KEY=sk-proj-TUKEY
+EOF
 
-Los botones de exportar/extraer audio están visibles pero **no funcionan** sin implementar backend.
+# .env del backend
+cat > apps/api/.env << 'EOF'
+OPENAI_API_KEY=sk-proj-TUKEY
+EOF
+```
 
-## 🚀 Roadmap Futuro
+### 4. Primer deploy
 
-**Fase 1 - Backend:**
-- [ ] API REST (Express/Fastify)
-- [ ] Jobs (BullMQ)
-- [ ] Procesamiento (FFmpeg)
-- [ ] Storage (S3/R2)
+```bash
+docker compose up --build -d
+docker compose ps   # los 3 servicios deben estar "Up"
+```
 
-**Fase 2 - Funcionalidades:**
-- [ ] Export funcional
-- [ ] Extracción de audio real
-- [ ] Múltiples pistas
-- [ ] Transiciones
-- [ ] Efectos y filtros
+### 5. Actualizar con nuevos cambios
 
-## 🤝 Contribuir
-
-1. Fork el proyecto
-2. Crea tu rama (`git checkout -b feature/nueva-funcionalidad`)
-3. Commit (`git commit -m 'feat: agregar funcionalidad'`)
-4. Push (`git push origin feature/nueva-funcionalidad`)
-5. Abre un Pull Request
-
-## 📄 Licencia
-
-MIT License
-
-## 👤 Autor
-
-**Harold Alejandro Villanueva Borda**
-
-- GitHub: [@HarryLexvb](https://github.com/HarryLexvb)
-- Email: harrylex8@gmail.com
-- Email institucional: harold.villanueva@gmail.com
-
-## 🔗 Enlaces
-
-- **Repositorio:** https://github.com/HarryLexvb/VideoEdition
-- **Issues:** https://github.com/HarryLexvb/VideoEdition/issues
-
-## 🙏 Tecnologías Utilizadas
-
-- **Uppy** - Upload modular y robusto
-- **Plyr** - Reproductor HTML5 elegante
-- **WaveSurfer.js** - Visualización de audio/video
-- **Zustand** - Estado simple y potente
-- **Lucide** - Íconos SVG modernos
-- **Tailwind CSS** - Utility-first CSS
-- **Vite** - Build tool ultrarrápido
+```bash
+ssh usuario@IP_VPS
+cd VideoEdition
+git pull origin main
+docker compose up --build -d
+```
 
 ---
 
-**Versión:** 0.4.0  
-**Última actualización:** 31 de Marzo, 2026  
-**Estado:** Frontend completo y funcional | Backend pendiente
+## Scripts
+
+### Frontend (raiz)
+
+| Script | Descripcion |
+|--------|-------------|
+| `npm run dev` | Servidor de desarrollo Vite |
+| `npm run build` | Build de produccion |
+| `npm run preview` | Preview del build |
+| `npm run typecheck` | Verificacion de tipos TypeScript |
+
+### Backend (`apps/api`)
+
+| Script | Descripcion |
+|--------|-------------|
+| `npm run dev` | Desarrollo con hot reload (tsx watch) |
+| `npm run build` | Compila TypeScript a `dist/` |
+| `npm run start` | Inicia build compilado |
 
 ---
 
-## 📝 Notas de Desarrollo
+## Arquitectura de contenedores
 
-### Problemas Resueltos
+```
+           Browser
+              │
+         port 80 (HTTP)
+              │
+        ┌─────▼─────┐
+        │   Nginx   │  (contenedor web)
+        │  SPA +    │
+        │  Proxy    │
+        └──┬─────┬──┘
+           │     │
+      /api/│     │/files/
+           │     │
+    ┌──────▼─┐ ┌─▼──────┐
+    │  API   │ │  tusd  │
+    │Fastify │ │ :8080  │
+    │ :3000  │ └────────┘
+    │FFmpeg  │
+    │Whisper │
+    └────────┘
+```
 
-✅ Video flickering al cargar  
-✅ Timeline no renderiza  
-✅ Área de carga sin respuesta al click  
-✅ Callbacks inestables causando re-renders  
-✅ Object URLs sin cleanup  
-✅ Caracteres especiales mal codificados (UTF-8)
-
-### Cambios Recientes (v0.4.0)
-
-- Corregida codificación UTF-8 en textos
-- Optimizado flujo de carga de video
-- Mejorada UI del botón "Cargar Video"
-- Estabilizados callbacks con useCallback
-- Agregado soporte para click en área de drop
-- README actualizado con información verídica
+Volumenes Docker compartidos entre `api` y `tusd`:
+- `uploads_data` — archivos subidos por el usuario
+- `results_data` — MP3 y videos exportados
+- `temp_data` — archivos temporales de FFmpeg
 
 ---
 
-**⚠️ RECORDATORIO FINAL**
+## Deuda tecnica
 
-Este proyecto es un **editor de video no destructivo frontend**. La funcionalidad de procesamiento real (exportar, extraer audio) requiere implementar un backend con FFmpeg. El estado actual solo permite visualizar, segmentar y preparar la configuración de edición.
+- Autenticacion / autorizacion
+- Persistencia de jobs (hoy en memoria — se pierden al reiniciar)
+- Cola de trabajo con BullMQ + Redis
+- Validacion de schema en runtime (Zod)
+- Tests unitarios e integracion
+- SSL/HTTPS directo en nginx (hoy se asume terminacion SSL externa)
+
+---
+
+## Licencia
+
+MIT
